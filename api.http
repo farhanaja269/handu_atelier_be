@@ -1,0 +1,6 @@
+POST  http://localhost:3001/kategori
+Content-Type: application/json
+
+{
+    "nama_kategori": "kebaya"
+}
