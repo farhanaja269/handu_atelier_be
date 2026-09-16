@@ -237,6 +237,58 @@ const createDetailPeminjaman = (
                 loanResult[0];
 
             // ==================================================
+            // VALIDASI TANGGAL PEMINJAMAN
+            // ==================================================
+
+            if (
+                !loan.tanggal_peminjaman ||
+                !loan.tanggal_kembali
+            ) {
+                return res.status(400).json({
+                    success: false,
+                    message:
+                        "Tanggal peminjaman tidak lengkap",
+                });
+            }
+
+            const tanggalPeminjaman =
+                loan.tanggal_peminjaman;
+
+            const tanggalKembali =
+                loan.tanggal_kembali;
+
+            const startDate =
+                new Date(
+                    `${tanggalPeminjaman}T00:00:00`
+                );
+
+            const endDate =
+                new Date(
+                    `${tanggalKembali}T00:00:00`
+                );
+
+            if (
+                isNaN(startDate.getTime()) ||
+                isNaN(endDate.getTime())
+            ) {
+                return res.status(400).json({
+                    success: false,
+                    message:
+                        "Tanggal peminjaman tidak valid",
+                });
+            }
+
+            if (
+                endDate <= startDate
+            ) {
+                return res.status(400).json({
+                    success: false,
+                    message:
+                        "Tanggal kembali harus setelah tanggal peminjaman",
+                });
+            }
+
+            // ==================================================
             // DETAIL HANYA BOLEH DITAMBAHKAN SEBELUM DIPROSES
             // ==================================================
 
@@ -277,7 +329,7 @@ const createDetailPeminjaman = (
                     }
 
                     // ==================================================
-                    // CEGAH KOSTUM YANG SAMA DITAMBAHKAN BERULANG
+                    // CEGAH KOSTUM YANG SAMA
                     // ==================================================
 
                     const duplicate =
@@ -297,53 +349,124 @@ const createDetailPeminjaman = (
                     }
 
                     // ==================================================
-                    // DATA YANG AKAN DISIMPAN
+                    // CEK KETERSEDIAAN KOSTUM
+                    // ==================================================
+                    //
+                    // PENTING:
+                    // Pengecekan dilakukan di BACKEND.
+                    //
+                    // Parameter:
+                    // idKostum
+                    // tanggalPeminjaman
+                    // tanggalKembali
+                    // jumlah
+                    //
+                    // Jika stok untuk tanggal tersebut tidak cukup,
+                    // detail TIDAK akan dimasukkan ke database.
                     // ==================================================
 
-                    const detailData = {
-                        id_peminjaman:
-                            idPeminjaman,
-
-                        id_kostum:
-                            idKostum,
-
+                    peminjamanModel.checkKostumAvailability(
+                        idKostum,
+                        tanggalPeminjaman,
+                        tanggalKembali,
                         jumlah,
+                        null,
+                        (availabilityErr, availability) => {
 
-                        harga,
-
-                        subtotal,
-                    };
-
-                    // ==================================================
-                    // INSERT DETAIL
-                    // ==================================================
-
-                    detailPeminjamanModel.createDetailPeminjaman(
-                        detailData,
-                        (err, result) => {
-
-                            if (err) {
+                            if (availabilityErr) {
                                 console.error(
-                                    "ERROR CREATE DETAIL PEMINJAMAN:",
-                                    err
+                                    "ERROR CEK AVAILABILITY KOSTUM:",
+                                    availabilityErr
                                 );
 
                                 return res.status(500).json({
                                     success: false,
                                     message:
-                                        "Gagal menambahkan detail peminjaman",
+                                        "Gagal memeriksa ketersediaan kostum",
                                     error:
-                                        err.message,
+                                        availabilityErr.message,
                                 });
                             }
 
-                            return res.status(201).json({
-                                success: true,
-                                message:
-                                    "Detail peminjaman berhasil ditambahkan",
-                                id_detail:
-                                    result.insertId,
-                            });
+                            // ==================================================
+                            // KOSTUM TIDAK TERSEDIA
+                            // ==================================================
+
+                            if (
+                                !availability ||
+                                availability.tersedia !== true
+                            ) {
+
+                                return res.status(409).json({
+                                    success: false,
+                                    message:
+                                        "Kostum tidak tersedia untuk tanggal peminjaman tersebut.",
+                                    stok_fisik:
+                                        Number(
+                                            availability?.stok_fisik || 0
+                                        ),
+                                    jumlah_terpesan:
+                                        Number(
+                                            availability?.jumlah_terpesan || 0
+                                        ),
+                                    stok_tersedia:
+                                        Number(
+                                            availability?.stok_tersedia || 0
+                                        ),
+                                });
+                            }
+
+                            // ==================================================
+                            // DATA YANG AKAN DISIMPAN
+                            // ==================================================
+
+                            const detailData = {
+
+                                id_peminjaman:
+                                    idPeminjaman,
+
+                                id_kostum:
+                                    idKostum,
+
+                                jumlah,
+
+                                harga,
+
+                                subtotal,
+                            };
+
+                            // ==================================================
+                            // INSERT DETAIL
+                            // ==================================================
+
+                            detailPeminjamanModel.createDetailPeminjaman(
+                                detailData,
+                                (err, result) => {
+
+                                    if (err) {
+                                        console.error(
+                                            "ERROR CREATE DETAIL PEMINJAMAN:",
+                                            err
+                                        );
+
+                                        return res.status(500).json({
+                                            success: false,
+                                            message:
+                                                "Gagal menambahkan detail peminjaman",
+                                            error:
+                                                err.message,
+                                        });
+                                    }
+
+                                    return res.status(201).json({
+                                        success: true,
+                                        message:
+                                            "Detail peminjaman berhasil ditambahkan",
+                                        id_detail:
+                                            result.insertId,
+                                    });
+                                }
+                            );
                         }
                     );
                 }

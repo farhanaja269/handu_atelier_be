@@ -9,7 +9,6 @@ const db = require("../config/db");
 // ======================================================
 
 const getAllPengembalian = (callback) => {
-
     const sql = `
         SELECT
             p.id_pengembalian,
@@ -35,16 +34,13 @@ const getAllPengembalian = (callback) => {
         FROM pengembalian p
 
         INNER JOIN peminjaman pj
-            ON p.id_peminjaman =
-               pj.id_peminjaman
+            ON p.id_peminjaman = pj.id_peminjaman
 
         INNER JOIN users u
-            ON pj.id_user =
-               u.id_user
+            ON pj.id_user = u.id_user
 
         LEFT JOIN petugas pt
-            ON p.diterima_oleh =
-               pt.id_petugas
+            ON p.diterima_oleh = pt.id_petugas
 
         ORDER BY
             p.id_pengembalian DESC
@@ -53,6 +49,7 @@ const getAllPengembalian = (callback) => {
     db.query(sql, callback);
 };
 
+
 // ======================================================
 // ALIAS GET PENGEMBALIAN
 // ======================================================
@@ -60,6 +57,7 @@ const getAllPengembalian = (callback) => {
 const getPengembalian = (callback) => {
     getAllPengembalian(callback);
 };
+
 
 // ======================================================
 // GET PENGEMBALIAN BERDASARKAN ID
@@ -95,16 +93,13 @@ const getPengembalianById = (
         FROM pengembalian p
 
         INNER JOIN peminjaman pj
-            ON p.id_peminjaman =
-               pj.id_peminjaman
+            ON p.id_peminjaman = pj.id_peminjaman
 
         INNER JOIN users u
-            ON pj.id_user =
-               u.id_user
+            ON pj.id_user = u.id_user
 
         LEFT JOIN petugas pt
-            ON p.diterima_oleh =
-               pt.id_petugas
+            ON p.diterima_oleh = pt.id_petugas
 
         WHERE
             p.id_pengembalian = ?
@@ -116,6 +111,7 @@ const getPengembalianById = (
         callback
     );
 };
+
 
 // ======================================================
 // CEK APAKAH SUDAH ADA PENGEMBALIAN
@@ -140,6 +136,7 @@ const checkExistingPengembalian = (
         callback
     );
 };
+
 
 // ======================================================
 // GET PEMINJAMAN YANG BELUM DIKEMBALIKAN
@@ -180,20 +177,16 @@ const getPeminjamanBelumDikembalikan = (
         FROM peminjaman pj
 
         INNER JOIN users u
-            ON pj.id_user =
-               u.id_user
+            ON pj.id_user = u.id_user
 
         INNER JOIN detail_peminjaman d
-            ON pj.id_peminjaman =
-               d.id_peminjaman
+            ON pj.id_peminjaman = d.id_peminjaman
 
         INNER JOIN kostum k
-            ON d.id_kostum =
-               k.id_kostum
+            ON d.id_kostum = k.id_kostum
 
         LEFT JOIN pengembalian pg
-            ON pj.id_peminjaman =
-               pg.id_peminjaman
+            ON pj.id_peminjaman = pg.id_peminjaman
 
         WHERE
             pj.status = 'Diproses'
@@ -212,6 +205,7 @@ const getPeminjamanBelumDikembalikan = (
     );
 };
 
+
 // ======================================================
 // CREATE PENGEMBALIAN
 // ======================================================
@@ -221,13 +215,15 @@ const getPeminjamanBelumDikembalikan = (
 // 1. Lock peminjaman
 // 2. Pastikan status Diproses
 // 3. Pastikan belum dikembalikan
-// 4. Ambil detail
-// 5. Tambah stok
+// 4. Ambil detail peminjaman
+// 5. Kembalikan stok kostum
 // 6. Insert pengembalian
-// 7. Status -> Selesai
-// 8. Commit
+// 7. Jika denda > 0, insert denda
+// 8. Status peminjaman -> Selesai
+// 9. Commit
 //
-// Jika gagal -> rollback semuanya.
+// Jika salah satu proses gagal:
+// semua perubahan di-rollback.
 //
 // ======================================================
 
@@ -248,6 +244,18 @@ const createPengembalian = (
         );
     }
 
+    const nominalDenda =
+        Number(data.denda) || 0;
+
+    if (nominalDenda < 0) {
+        return callback(
+            new Error(
+                "Nominal denda tidak boleh negatif."
+            ),
+            null
+        );
+    }
+
     db.getConnection(
         (connectionErr, connection) => {
 
@@ -262,6 +270,7 @@ const createPengembalian = (
                 (transactionErr) => {
 
                     if (transactionErr) {
+
                         connection.release();
 
                         return callback(
@@ -270,12 +279,18 @@ const createPengembalian = (
                         );
                     }
 
+
+                    // ==================================================
+                    // FUNCTION ROLLBACK
+                    // ==================================================
+
                     const rollback = (
                         error
                     ) => {
 
                         connection.rollback(
                             () => {
+
                                 connection.release();
 
                                 callback(
@@ -285,6 +300,7 @@ const createPengembalian = (
                             }
                         );
                     };
+
 
                     // ==================================================
                     // LOCK PEMINJAMAN
@@ -318,6 +334,7 @@ const createPengembalian = (
                                 !peminjamanRows ||
                                 peminjamanRows.length === 0
                             ) {
+
                                 return rollback(
                                     new Error(
                                         "Peminjaman tidak ditemukan."
@@ -328,6 +345,7 @@ const createPengembalian = (
                             const peminjaman =
                                 peminjamanRows[0];
 
+
                             // ==================================================
                             // STATUS HARUS DIPROSES
                             // ==================================================
@@ -336,6 +354,7 @@ const createPengembalian = (
                                 peminjaman.status !==
                                 "Diproses"
                             ) {
+
                                 return rollback(
                                     new Error(
                                         `Peminjaman tidak dapat dikembalikan karena status saat ini adalah "${peminjaman.status}".`
@@ -343,8 +362,9 @@ const createPengembalian = (
                                 );
                             }
 
+
                             // ==================================================
-                            // CEK DUPLIKAT
+                            // CEK DUPLIKAT PENGEMBALIAN
                             // ==================================================
 
                             const existingSql = `
@@ -374,6 +394,7 @@ const createPengembalian = (
                                         existingRows &&
                                         existingRows.length > 0
                                     ) {
+
                                         return rollback(
                                             new Error(
                                                 "Peminjaman ini sudah memiliki data pengembalian."
@@ -381,8 +402,9 @@ const createPengembalian = (
                                         );
                                     }
 
+
                                     // ==================================================
-                                    // AMBIL DETAIL
+                                    // AMBIL DETAIL PEMINJAMAN
                                     // ==================================================
 
                                     const detailSql = `
@@ -414,6 +436,7 @@ const createPengembalian = (
                                                 !details ||
                                                 details.length === 0
                                             ) {
+
                                                 return rollback(
                                                     new Error(
                                                         "Detail peminjaman tidak ditemukan."
@@ -421,8 +444,9 @@ const createPengembalian = (
                                                 );
                                             }
 
+
                                             // ==================================================
-                                            // PROSES STOK
+                                            // PROSES PENGEMBALIAN STOK
                                             // ==================================================
 
                                             const processStock =
@@ -432,6 +456,7 @@ const createPengembalian = (
                                                         index >=
                                                         details.length
                                                     ) {
+
                                                         return insertPengembalian();
                                                     }
 
@@ -453,12 +478,14 @@ const createPengembalian = (
                                                         !jumlah ||
                                                         jumlah <= 0
                                                     ) {
+
                                                         return rollback(
                                                             new Error(
                                                                 `Detail kostum ID ${idKostum} tidak valid.`
                                                             )
                                                         );
                                                     }
+
 
                                                     const increaseStockSql = `
                                                         UPDATE kostum
@@ -470,7 +497,7 @@ const createPengembalian = (
                                                         increaseStockSql,
                                                         [
                                                             jumlah,
-                                                            idKostum,
+                                                            idKostum
                                                         ],
                                                         (
                                                             stockErr,
@@ -480,6 +507,7 @@ const createPengembalian = (
                                                             if (
                                                                 stockErr
                                                             ) {
+
                                                                 return rollback(
                                                                     stockErr
                                                                 );
@@ -488,8 +516,9 @@ const createPengembalian = (
                                                             if (
                                                                 !stockResult ||
                                                                 stockResult.affectedRows ===
-                                                                    0
+                                                                0
                                                             ) {
+
                                                                 return rollback(
                                                                     new Error(
                                                                         `Kostum ID ${idKostum} tidak ditemukan.`
@@ -503,6 +532,7 @@ const createPengembalian = (
                                                         }
                                                     );
                                                 };
+
 
                                             // ==================================================
                                             // INSERT PENGEMBALIAN
@@ -530,13 +560,11 @@ const createPengembalian = (
                                                             idPeminjaman,
                                                             data.tanggal_pengembalian,
                                                             data.kondisi_baju,
-                                                            Number(
-                                                                data.denda
-                                                            ) || 0,
+                                                            nominalDenda,
                                                             data.keterangan ||
                                                                 null,
                                                             data.diterima_oleh ||
-                                                                null,
+                                                                null
                                                         ],
                                                         (
                                                             insertErr,
@@ -546,81 +574,161 @@ const createPengembalian = (
                                                             if (
                                                                 insertErr
                                                             ) {
+
                                                                 return rollback(
                                                                     insertErr
                                                                 );
                                                             }
 
+
                                                             // ==================================================
-                                                            // STATUS -> SELESAI
+                                                            // JIKA ADA DENDA
+                                                            // INSERT KE TABEL DENDA
                                                             // ==================================================
 
-                                                            const updateStatusSql = `
-                                                                UPDATE peminjaman
-                                                                SET status = 'Selesai'
-                                                                WHERE
-                                                                    id_peminjaman = ?
-                                                                    AND status = 'Diproses'
-                                                            `;
+                                                            if (
+                                                                nominalDenda >
+                                                                0
+                                                            ) {
 
-                                                            connection.query(
-                                                                updateStatusSql,
-                                                                [idPeminjaman],
+                                                                const alasanDenda =
+                                                                    data.alasan_denda ||
+                                                                    data.keterangan ||
+                                                                    "Denda pengembalian kostum";
+
+
+                                                                const insertDendaSql = `
+                                                                    INSERT INTO denda
+                                                                    (
+                                                                        id_pengembalian,
+                                                                        nominal_denda,
+                                                                        alasan,
+                                                                        status,
+                                                                        dibuat_oleh,
+                                                                        diperbarui_oleh
+                                                                    )
+                                                                    VALUES (?, ?, ?, ?, ?, ?)
+                                                                `;
+
+                                                                connection.query(
+                                                                    insertDendaSql,
+                                                                    [
+                                                                        insertResult.insertId,
+                                                                        nominalDenda,
+                                                                        alasanDenda,
+                                                                        "Belum Dibayar",
+                                                                        data.diterima_oleh ||
+                                                                            null,
+                                                                        null
+                                                                    ],
+                                                                    (
+                                                                        dendaErr
+                                                                    ) => {
+
+                                                                        if (
+                                                                            dendaErr
+                                                                        ) {
+
+                                                                            return rollback(
+                                                                                dendaErr
+                                                                            );
+                                                                        }
+
+                                                                        updateStatusPeminjaman();
+                                                                    }
+                                                                );
+
+                                                            } else {
+
+                                                                updateStatusPeminjaman();
+                                                            }
+                                                        }
+                                                    );
+                                                };
+
+
+                                            // ==================================================
+                                            // UPDATE STATUS PEMINJAMAN
+                                            // ==================================================
+
+                                            const updateStatusPeminjaman =
+                                                () => {
+
+                                                    const updateStatusSql = `
+                                                        UPDATE peminjaman
+                                                        SET status = 'Selesai'
+                                                        WHERE
+                                                            id_peminjaman = ?
+                                                            AND status = 'Diproses'
+                                                    `;
+
+                                                    connection.query(
+                                                        updateStatusSql,
+                                                        [idPeminjaman],
+                                                        (
+                                                            updateErr,
+                                                            updateResult
+                                                        ) => {
+
+                                                            if (
+                                                                updateErr
+                                                            ) {
+
+                                                                return rollback(
+                                                                    updateErr
+                                                                );
+                                                            }
+
+                                                            if (
+                                                                !updateResult ||
+                                                                updateResult.affectedRows ===
+                                                                0
+                                                            ) {
+
+                                                                return rollback(
+                                                                    new Error(
+                                                                        "Status peminjaman gagal diubah menjadi Selesai."
+                                                                    )
+                                                                );
+                                                            }
+
+
+                                                            // ==================================================
+                                                            // COMMIT
+                                                            // ==================================================
+
+                                                            connection.commit(
                                                                 (
-                                                                    updateErr,
-                                                                    updateResult
+                                                                    commitErr
                                                                 ) => {
 
                                                                     if (
-                                                                        updateErr
+                                                                        commitErr
                                                                     ) {
-                                                                        return rollback(
-                                                                            updateErr
-                                                                        );
-                                                                    }
 
-                                                                    if (
-                                                                        !updateResult ||
-                                                                        updateResult.affectedRows ===
-                                                                            0
-                                                                    ) {
-                                                                        return rollback(
-                                                                            new Error(
-                                                                                "Status peminjaman gagal diubah menjadi Selesai."
-                                                                            )
-                                                                        );
-                                                                    }
+                                                                        return connection.rollback(
+                                                                            () => {
 
-                                                                    // ==================================================
-                                                                    // COMMIT
-                                                                    // ==================================================
+                                                                                connection.release();
 
-                                                                    connection.commit(
-                                                                        (
-                                                                            commitErr
-                                                                        ) => {
-
-                                                                            if (
-                                                                                commitErr
-                                                                            ) {
-                                                                                return connection.rollback(
-                                                                                    () => {
-                                                                                        connection.release();
-
-                                                                                        callback(
-                                                                                            commitErr,
-                                                                                            null
-                                                                                        );
-                                                                                    }
+                                                                                callback(
+                                                                                    commitErr,
+                                                                                    null
                                                                                 );
                                                                             }
+                                                                        );
+                                                                    }
 
-                                                                            connection.release();
+                                                                    connection.release();
 
-                                                                            callback(
-                                                                                null,
-                                                                                insertResult
-                                                                            );
+                                                                    callback(
+                                                                        null,
+                                                                        {
+                                                                            ...insertResult,
+                                                                            id_pengembalian:
+                                                                                insertResult.insertId,
+                                                                            denda:
+                                                                                nominalDenda
                                                                         }
                                                                     );
                                                                 }
@@ -629,6 +737,8 @@ const createPengembalian = (
                                                     );
                                                 };
 
+
+                                            // Mulai proses stok
                                             processStock(0);
                                         }
                                     );
@@ -642,15 +752,10 @@ const createPengembalian = (
     );
 };
 
+
 // ======================================================
 // UPDATE PENGEMBALIAN
 // ======================================================
-//
-// TIDAK BOLEH MENGUBAH:
-//
-// id_peminjaman
-// stok
-// status peminjaman
 //
 // Yang boleh diubah:
 //
@@ -660,6 +765,20 @@ const createPengembalian = (
 // keterangan
 // diterima_oleh
 //
+// Sinkronisasi dengan tabel denda:
+//
+// 1. Sebelumnya tidak ada denda + denda baru > 0
+//    -> buat record denda
+//
+// 2. Sudah ada denda + nominal berubah
+//    -> update nominal denda
+//
+// 3. Denda diubah menjadi 0
+//    -> hapus denda jika belum Lunas
+//
+// 4. Denda sudah Lunas
+//    -> nominal tidak boleh diubah
+//
 // ======================================================
 
 const updatePengembalian = (
@@ -668,30 +787,443 @@ const updatePengembalian = (
     callback
 ) => {
 
-    const sql = `
-        UPDATE pengembalian
-        SET
-            tanggal_pengembalian = ?,
-            kondisi_baju = ?,
-            denda = ?,
-            keterangan = ?,
-            diterima_oleh = ?
-        WHERE id_pengembalian = ?
-    `;
+    const idPengembalian =
+        Number(id);
 
-    db.query(
-        sql,
-        [
-            data.tanggal_pengembalian,
-            data.kondisi_baju,
-            Number(data.denda) || 0,
-            data.keterangan || null,
-            data.diterima_oleh || null,
-            Number(id),
-        ],
-        callback
+    const nominalDenda =
+        Number(data.denda) || 0;
+
+    if (!idPengembalian) {
+        return callback(
+            new Error(
+                "ID pengembalian tidak valid."
+            ),
+            null
+        );
+    }
+
+    if (nominalDenda < 0) {
+        return callback(
+            new Error(
+                "Nominal denda tidak boleh negatif."
+            ),
+            null
+        );
+    }
+
+    db.getConnection(
+        (connectionErr, connection) => {
+
+            if (connectionErr) {
+                return callback(
+                    connectionErr,
+                    null
+                );
+            }
+
+            connection.beginTransaction(
+                (transactionErr) => {
+
+                    if (transactionErr) {
+
+                        connection.release();
+
+                        return callback(
+                            transactionErr,
+                            null
+                        );
+                    }
+
+
+                    // ==================================================
+                    // ROLLBACK
+                    // ==================================================
+
+                    const rollback = (
+                        error
+                    ) => {
+
+                        connection.rollback(
+                            () => {
+
+                                connection.release();
+
+                                callback(
+                                    error,
+                                    null
+                                );
+                            }
+                        );
+                    };
+
+
+                    // ==================================================
+                    // COMMIT
+                    // ==================================================
+
+                    const commitUpdate =
+                        () => {
+
+                            connection.commit(
+                                (
+                                    commitErr
+                                ) => {
+
+                                    if (
+                                        commitErr
+                                    ) {
+
+                                        return connection.rollback(
+                                            () => {
+
+                                                connection.release();
+
+                                                callback(
+                                                    commitErr,
+                                                    null
+                                                );
+                                            }
+                                        );
+                                    }
+
+                                    connection.release();
+
+                                    callback(
+                                        null,
+                                        {
+                                            affectedRows: 1,
+                                            id_pengembalian:
+                                                idPengembalian
+                                        }
+                                    );
+                                }
+                            );
+                        };
+
+
+                    // ==================================================
+                    // AMBIL DATA PENGEMBALIAN
+                    // ==================================================
+
+                    const getReturnSql = `
+                        SELECT
+                            id_pengembalian,
+                            id_peminjaman,
+                            denda,
+                            diterima_oleh
+                        FROM pengembalian
+                        WHERE id_pengembalian = ?
+                        LIMIT 1
+                        FOR UPDATE
+                    `;
+
+                    connection.query(
+                        getReturnSql,
+                        [idPengembalian],
+                        (
+                            returnErr,
+                            returnRows
+                        ) => {
+
+                            if (returnErr) {
+                                return rollback(
+                                    returnErr
+                                );
+                            }
+
+                            if (
+                                !returnRows ||
+                                returnRows.length === 0
+                            ) {
+
+                                return rollback(
+                                    new Error(
+                                        "Data pengembalian tidak ditemukan."
+                                    )
+                                );
+                            }
+
+                            const pengembalian =
+                                returnRows[0];
+
+
+                            // ==================================================
+                            // UPDATE DATA PENGEMBALIAN
+                            // ==================================================
+
+                            const updateReturnSql = `
+                                UPDATE pengembalian
+                                SET
+                                    tanggal_pengembalian = ?,
+                                    kondisi_baju = ?,
+                                    denda = ?,
+                                    keterangan = ?,
+                                    diterima_oleh = ?
+                                WHERE id_pengembalian = ?
+                            `;
+
+                            connection.query(
+                                updateReturnSql,
+                                [
+                                    data.tanggal_pengembalian,
+                                    data.kondisi_baju,
+                                    nominalDenda,
+                                    data.keterangan || null,
+                                    data.diterima_oleh ||
+                                        pengembalian.diterima_oleh ||
+                                        null,
+                                    idPengembalian
+                                ],
+                                (
+                                    updateReturnErr
+                                ) => {
+
+                                    if (
+                                        updateReturnErr
+                                    ) {
+
+                                        return rollback(
+                                            updateReturnErr
+                                        );
+                                    }
+
+
+                                    // ==================================================
+                                    // AMBIL DATA DENDA
+                                    // ==================================================
+
+                                    const getDendaSql = `
+                                        SELECT
+                                            id_denda,
+                                            nominal_denda,
+                                            status
+                                        FROM denda
+                                        WHERE id_pengembalian = ?
+                                        LIMIT 1
+                                        FOR UPDATE
+                                    `;
+
+                                    connection.query(
+                                        getDendaSql,
+                                        [idPengembalian],
+                                        (
+                                            dendaErr,
+                                            dendaRows
+                                        ) => {
+
+                                            if (dendaErr) {
+                                                return rollback(
+                                                    dendaErr
+                                                );
+                                            }
+
+
+                                            // ==================================================
+                                            // BELUM ADA DATA DENDA
+                                            // ==================================================
+
+                                            if (
+                                                !dendaRows ||
+                                                dendaRows.length === 0
+                                            ) {
+
+                                                if (
+                                                    nominalDenda <=
+                                                    0
+                                                ) {
+
+                                                    return commitUpdate();
+                                                }
+
+
+                                                // ==========================================
+                                                // BUAT DENDA BARU
+                                                // ==========================================
+
+                                                const insertDendaSql = `
+                                                    INSERT INTO denda
+                                                    (
+                                                        id_pengembalian,
+                                                        nominal_denda,
+                                                        alasan,
+                                                        status,
+                                                        dibuat_oleh,
+                                                        diperbarui_oleh
+                                                    )
+                                                    VALUES (?, ?, ?, ?, ?, ?)
+                                                `;
+
+                                                connection.query(
+                                                    insertDendaSql,
+                                                    [
+                                                        idPengembalian,
+                                                        nominalDenda,
+                                                        data.alasan_denda ||
+                                                            data.keterangan ||
+                                                            "Denda pengembalian kostum",
+                                                        "Belum Dibayar",
+                                                        data.diterima_oleh ||
+                                                            pengembalian.diterima_oleh ||
+                                                            null,
+                                                        null
+                                                    ],
+                                                    (
+                                                        insertDendaErr
+                                                    ) => {
+
+                                                        if (
+                                                            insertDendaErr
+                                                        ) {
+
+                                                            return rollback(
+                                                                insertDendaErr
+                                                            );
+                                                        }
+
+                                                        commitUpdate();
+                                                    }
+                                                );
+
+                                                return;
+                                            }
+
+
+                                            // ==================================================
+                                            // DATA DENDA SUDAH ADA
+                                            // ==================================================
+
+                                            const denda =
+                                                dendaRows[0];
+
+
+                                            // ==================================================
+                                            // DENDA DIUBAH MENJADI 0
+                                            // ==================================================
+
+                                            if (
+                                                nominalDenda <=
+                                                0
+                                            ) {
+
+                                                if (
+                                                    denda.status ===
+                                                    "Lunas"
+                                                ) {
+
+                                                    return rollback(
+                                                        new Error(
+                                                            "Denda yang sudah Lunas tidak dapat dihapus dengan mengubah nominal menjadi 0."
+                                                        )
+                                                    );
+                                                }
+
+
+                                                const deleteDendaSql = `
+                                                    DELETE FROM denda
+                                                    WHERE id_denda = ?
+                                                `;
+
+                                                connection.query(
+                                                    deleteDendaSql,
+                                                    [
+                                                        denda.id_denda
+                                                    ],
+                                                    (
+                                                        deleteDendaErr
+                                                    ) => {
+
+                                                        if (
+                                                            deleteDendaErr
+                                                        ) {
+
+                                                            return rollback(
+                                                                deleteDendaErr
+                                                            );
+                                                        }
+
+                                                        commitUpdate();
+                                                    }
+                                                );
+
+                                                return;
+                                            }
+
+
+                                            // ==================================================
+                                            // DENDA SUDAH LUNAS
+                                            // ==================================================
+
+                                            if (
+                                                denda.status ===
+                                                "Lunas" &&
+                                                nominalDenda !==
+                                                Number(
+                                                    denda.nominal_denda
+                                                )
+                                            ) {
+
+                                                return rollback(
+                                                    new Error(
+                                                        "Nominal denda yang sudah Lunas tidak dapat diubah."
+                                                    )
+                                                );
+                                            }
+
+
+                                            // ==================================================
+                                            // UPDATE DENDA
+                                            // ==================================================
+
+                                            const updateDendaSql = `
+                                                UPDATE denda
+                                                SET
+                                                    nominal_denda = ?,
+                                                    alasan = ?,
+                                                    diperbarui_oleh = ?,
+                                                    updated_at = CURRENT_TIMESTAMP
+                                                WHERE id_denda = ?
+                                            `;
+
+                                            connection.query(
+                                                updateDendaSql,
+                                                [
+                                                    nominalDenda,
+                                                    data.alasan_denda ||
+                                                        data.keterangan ||
+                                                        "Denda pengembalian kostum",
+                                                    data.diterima_oleh ||
+                                                        pengembalian.diterima_oleh ||
+                                                        null,
+                                                    denda.id_denda
+                                                ],
+                                                (
+                                                    updateDendaErr
+                                                ) => {
+
+                                                    if (
+                                                        updateDendaErr
+                                                    ) {
+
+                                                        return rollback(
+                                                            updateDendaErr
+                                                        );
+                                                    }
+
+                                                    commitUpdate();
+                                                }
+                                            );
+                                        }
+                                    );
+                                }
+                            );
+                        }
+                    );
+                }
+            );
+        }
     );
 };
+
 
 // ======================================================
 // DELETE PENGEMBALIAN
@@ -721,6 +1253,7 @@ const deletePengembalian = (
     );
 };
 
+
 // ======================================================
 // EXPORT
 // ======================================================
@@ -733,5 +1266,5 @@ module.exports = {
     getPeminjamanBelumDikembalikan,
     createPengembalian,
     updatePengembalian,
-    deletePengembalian,
+    deletePengembalian
 };

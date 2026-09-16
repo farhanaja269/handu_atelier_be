@@ -1,138 +1,193 @@
+// ==================================================
+// CONFIG
+// ==================================================
+
 require("dotenv").config();
 
 const express = require("express");
+
 const cors = require("cors");
+
 const path = require("path");
+
 const http = require("http");
-const { Server } = require("socket.io");
+
+const multer = require("multer");
+
+const {
+    Server
+} = require("socket.io");
+
 
 const app = express();
+
 
 // ==================================================
 // PORT
 // ==================================================
 
-const PORT = Number(process.env.PORT) || 3001;
+const PORT =
+    Number(process.env.PORT) || 3001;
+
 
 // ==================================================
 // HTTP SERVER
 // ==================================================
 
-const server = http.createServer(app);
+const server =
+    http.createServer(app);
+
 
 // ==================================================
 // SOCKET.IO
 // ==================================================
 
-const io = new Server(server, {
-    cors: {
-        origin: true,
-        methods: [
-            "GET",
-            "POST",
-            "PUT",
-            "DELETE",
-            "OPTIONS"
-        ],
-        credentials: true
-    },
+const io =
+    new Server(
+        server,
+        {
+            cors: {
 
-    transports: [
-        "websocket",
-        "polling"
-    ]
-});
+                origin: true,
+
+                methods: [
+                    "GET",
+                    "POST",
+                    "PUT",
+                    "DELETE",
+                    "OPTIONS"
+                ],
+
+                credentials: true
+
+            },
+
+            transports: [
+                "websocket",
+                "polling"
+            ]
+        }
+    );
+
 
 // ==================================================
 // SOCKET.IO CONNECTION
 // ==================================================
 
-io.on("connection", (socket) => {
+io.on(
+    "connection",
+    (socket) => {
 
-    console.log(
-        `Socket terhubung: ${socket.id}`
-    );
+        console.log(
+            `Socket terhubung: ${socket.id}`
+        );
 
-    // ==============================================
-    // JOIN CONVERSATION
-    // ==============================================
 
-    socket.on(
-        "join_conversation",
-        (id_percakapan) => {
+        // ==============================================
+        // JOIN CONVERSATION
+        // ==============================================
 
-            const id = Number(
-                id_percakapan
-            );
+        socket.on(
+            "join_conversation",
+            (id_percakapan) => {
 
-            if (
-                !Number.isInteger(id) ||
-                id <= 0
-            ) {
-                console.log(
-                    "ID percakapan tidak valid:",
-                    id_percakapan
+                const id =
+                    Number(
+                        id_percakapan
+                    );
+
+
+                if (
+                    !Number.isInteger(id) ||
+                    id <= 0
+                ) {
+
+                    console.log(
+                        "ID percakapan tidak valid:",
+                        id_percakapan
+                    );
+
+                    return;
+
+                }
+
+
+                const room =
+                    `conversation:${id}`;
+
+
+                socket.join(
+                    room
                 );
 
-                return;
+
+                console.log(
+                    `Socket ${socket.id} masuk ${room}`
+                );
+
             }
+        );
 
-            const room =
-                `conversation:${id}`;
 
-            socket.join(room);
+        // ==============================================
+        // LEAVE CONVERSATION
+        // ==============================================
 
-            console.log(
-                `Socket ${socket.id} masuk ${room}`
-            );
-        }
-    );
+        socket.on(
+            "leave_conversation",
+            (id_percakapan) => {
 
-    // ==============================================
-    // LEAVE CONVERSATION
-    // ==============================================
+                const id =
+                    Number(
+                        id_percakapan
+                    );
 
-    socket.on(
-        "leave_conversation",
-        (id_percakapan) => {
 
-            const id = Number(
-                id_percakapan
-            );
+                if (
+                    !Number.isInteger(id) ||
+                    id <= 0
+                ) {
 
-            if (
-                !Number.isInteger(id) ||
-                id <= 0
-            ) {
-                return;
+                    return;
+
+                }
+
+
+                const room =
+                    `conversation:${id}`;
+
+
+                socket.leave(
+                    room
+                );
+
+
+                console.log(
+                    `Socket ${socket.id} keluar ${room}`
+                );
+
             }
+        );
 
-            const room =
-                `conversation:${id}`;
 
-            socket.leave(room);
+        // ==============================================
+        // DISCONNECT
+        // ==============================================
 
-            console.log(
-                `Socket ${socket.id} keluar ${room}`
-            );
-        }
-    );
+        socket.on(
+            "disconnect",
+            (reason) => {
 
-    // ==============================================
-    // DISCONNECT
-    // ==============================================
+                console.log(
+                    `Socket terputus: ${socket.id} - ${reason}`
+                );
 
-    socket.on(
-        "disconnect",
-        (reason) => {
+            }
+        );
 
-            console.log(
-                `Socket terputus: ${socket.id} - ${reason}`
-            );
-        }
-    );
+    }
+);
 
-});
 
 // ==================================================
 // STATIC UPLOADS
@@ -148,99 +203,192 @@ app.use(
     )
 );
 
+
 // ==================================================
 // CORS
 // ==================================================
 
 app.use(
-    cors({
-        origin: true,
-        credentials: true
-    })
+    cors(
+        {
+            origin: true,
+
+            credentials: true
+        }
+    )
 );
+
 
 // ==================================================
 // BODY PARSER
 // ==================================================
 
 app.use(
-    express.json({
-        limit: "10mb"
-    })
+    express.json(
+        {
+            limit: "10mb"
+        }
+    )
 );
 
+
 app.use(
-    express.urlencoded({
-        extended: true,
-        limit: "10mb"
-    })
+    express.urlencoded(
+        {
+            extended: true,
+
+            limit: "10mb"
+        }
+    )
 );
+
 
 // ==================================================
 // KONEKSI DATABASE
 // ==================================================
 
-require("./config/db");
+require(
+    "./config/db"
+);
+
 
 // ==================================================
 // IMPORT ROUTER
 // ==================================================
 
 const usersRouter =
-    require("./routers/usersRouter");
+    require(
+        "./routers/usersRouter"
+    );
+
 
 const adminRouter =
-    require("./routers/adminRouter");
+    require(
+        "./routers/adminRouter"
+    );
+
 
 const petugasRouter =
-    require("./routers/petugasRouter");
+    require(
+        "./routers/petugasRouter"
+    );
+
 
 const kategoriRouter =
-    require("./routers/kategoriRouter");
+    require(
+        "./routers/kategoriRouter"
+    );
+
 
 const kostumRouter =
-    require("./routers/kostumRouter");
+    require(
+        "./routers/kostumRouter"
+    );
+
 
 const koleksiRouter =
-    require("./routers/koleksiRouter");
+    require(
+        "./routers/koleksiRouter"
+    );
+
 
 const registrasiRouter =
-    require("./routers/registrasiRouter");
+    require(
+        "./routers/registrasiRouter"
+    );
+
 
 const peminjamanRouter =
-    require("./routers/peminjamanRouter");
+    require(
+        "./routers/peminjamanRouter"
+    );
+
 
 const detailPeminjamanRouter =
-    require("./routers/detailPeminjamanRouter");
+    require(
+        "./routers/detailPeminjamanRouter"
+    );
+
 
 const pengembalianRouter =
-    require("./routers/pengembalianRouter");
+    require(
+        "./routers/pengembalianRouter"
+    );
+
 
 const pembayaranRouter =
-    require("./routers/pembayaranRouter");
+    require(
+        "./routers/pembayaranRouter"
+    );
+
 
 const notificationRouter =
-    require("./routers/notificationRouter");
+    require(
+        "./routers/notificationRouter"
+    );
+
 
 const pengaturanPembayaranRouter =
     require(
         "./routers/pengaturanPembayaranRouter"
     );
 
+
 const chatRouter =
-    require("./routers/chatRouter");
+    require(
+        "./routers/chatRouter"
+    );
+
+
+// ==================================================
+// ROUTER DENDA
+// ==================================================
+
+const dendaRouter =
+    require(
+        "./routers/dendaRouter"
+    );
+
+
+// ==================================================
+// ROUTER PEMBAYARAN DENDA
+// ==================================================
+
+const pembayaranDendaRouter =
+    require(
+        "./routers/pembayaranDendaRouter"
+    );
+
+
+// ==================================================
+// ROUTER PENGEMBALIAN DANA
+// ==================================================
+
+const pengembalianDanaRouter =
+    require(
+        "./routers/pengembalianDanaRouter"
+    );
+
+
+// ==================================================
+// CHAT CONTROLLER
+// ==================================================
 
 const chatController =
     require(
         "./controllers/chatController"
     );
 
+
 // ==================================================
 // HUBUNGKAN CHAT CONTROLLER
 // DENGAN SOCKET.IO
 // ==================================================
 
-chatController.setSocketIO(io);
+chatController.setSocketIO(
+    io
+);
+
 
 // ==================================================
 // API ROUTER
@@ -251,65 +399,108 @@ app.use(
     usersRouter
 );
 
+
 app.use(
     "/api/admin",
     adminRouter
 );
+
 
 app.use(
     "/api/petugas",
     petugasRouter
 );
 
+
 app.use(
     "/api/kategori",
     kategoriRouter
 );
+
 
 app.use(
     "/api/kostum",
     kostumRouter
 );
 
+
 app.use(
     "/api/koleksi",
     koleksiRouter
 );
+
 
 app.use(
     "/api/registrasi",
     registrasiRouter
 );
 
+
 app.use(
     "/api/peminjaman",
     peminjamanRouter
 );
+
 
 app.use(
     "/api/detail-peminjaman",
     detailPeminjamanRouter
 );
 
+
 app.use(
     "/api/pengembalian",
     pengembalianRouter
 );
+
 
 app.use(
     "/api/pembayaran",
     pembayaranRouter
 );
 
+
 app.use(
     "/api/notifications",
     notificationRouter
 );
 
+
 app.use(
     "/api/pengaturan-pembayaran",
     pengaturanPembayaranRouter
 );
+
+
+// ==================================================
+// ROUTER DENDA
+// ==================================================
+
+app.use(
+    "/api/denda",
+    dendaRouter
+);
+
+
+// ==================================================
+// ROUTER PEMBAYARAN DENDA
+// ==================================================
+
+app.use(
+    "/api/pembayaran-denda",
+    pembayaranDendaRouter
+);
+
+
+// ==================================================
+// ROUTER PENGEMBALIAN DANA
+// ==================================================
+
+app.use(
+    "/api/pengembalian-dana",
+    pengembalianDanaRouter
+);
+
 
 // ==================================================
 // CHAT ROUTER
@@ -320,6 +511,7 @@ app.use(
     chatRouter
 );
 
+
 // ==================================================
 // ROUTE UTAMA BACKEND
 // ==================================================
@@ -328,69 +520,84 @@ app.get(
     "/",
     (req, res) => {
 
-        res.status(200).json({
-            success: true,
+        res.status(200).json(
+            {
 
-            message:
-                "Backend Handu Atelier Berjalan",
+                success: true,
 
-            version:
-                "1.0.0",
+                message:
+                    "Backend Handu Atelier Berjalan",
 
-            endpoints: {
+                version:
+                    "1.0.0",
 
-                users:
-                    "/api/users",
+                endpoints: {
 
-                admin:
-                    "/api/admin",
+                    users:
+                        "/api/users",
 
-                petugas:
-                    "/api/petugas",
+                    admin:
+                        "/api/admin",
 
-                kategori:
-                    "/api/kategori",
+                    petugas:
+                        "/api/petugas",
 
-                kostum:
-                    "/api/kostum",
+                    kategori:
+                        "/api/kategori",
 
-                koleksi:
-                    "/api/koleksi",
+                    kostum:
+                        "/api/kostum",
 
-                registrasi:
-                    "/api/registrasi",
+                    koleksi:
+                        "/api/koleksi",
 
-                peminjaman:
-                    "/api/peminjaman",
+                    registrasi:
+                        "/api/registrasi",
 
-                detailPeminjaman:
-                    "/api/detail-peminjaman",
+                    peminjaman:
+                        "/api/peminjaman",
 
-                pengembalian:
-                    "/api/pengembalian",
+                    detailPeminjaman:
+                        "/api/detail-peminjaman",
 
-                pembayaran:
-                    "/api/pembayaran",
+                    pengembalian:
+                        "/api/pengembalian",
 
-                notifications:
-                    "/api/notifications",
+                    pembayaran:
+                        "/api/pembayaran",
 
-                pengaturanPembayaran:
-                    "/api/pengaturan-pembayaran",
+                    denda:
+                        "/api/denda",
 
-                chat:
-                    "/api/chat"
-            },
+                    pembayaranDenda:
+                        "/api/pembayaran-denda",
 
-            socket:
-                true,
+                    pengembalianDana:
+                        "/api/pengembalian-dana",
 
-            timestamp:
-                new Date().toISOString()
-        });
+                    notifications:
+                        "/api/notifications",
+
+                    pengaturanPembayaran:
+                        "/api/pengaturan-pembayaran",
+
+                    chat:
+                        "/api/chat"
+
+                },
+
+                socket:
+                    true,
+
+                timestamp:
+                    new Date().toISOString()
+
+            }
+        );
 
     }
 );
+
 
 // ==================================================
 // FRONTEND REACT DIST
@@ -402,11 +609,13 @@ const buildPath =
         "dist"
     );
 
+
 app.use(
     express.static(
         buildPath
     )
 );
+
 
 // ==================================================
 // FRONTEND FALLBACK
@@ -415,23 +624,35 @@ app.use(
 app.use(
     (req, res, next) => {
 
-        // Jangan ganggu API
+        // ==========================================
+        // JANGAN GANGGU API
+        // ==========================================
+
         if (
             req.path.startsWith(
                 "/api/"
             )
         ) {
+
             return next();
+
         }
 
-        // Jangan ganggu Socket.IO
+
+        // ==========================================
+        // JANGAN GANGGU SOCKET.IO
+        // ==========================================
+
         if (
             req.path.startsWith(
                 "/socket.io/"
             )
         ) {
+
             return next();
+
         }
+
 
         const indexPath =
             path.join(
@@ -439,12 +660,15 @@ app.use(
                 "index.html"
             );
 
+
         res.sendFile(
             indexPath,
             (err) => {
 
                 if (err) {
+
                     next(err);
+
                 }
 
             }
@@ -453,6 +677,7 @@ app.use(
     }
 );
 
+
 // ==================================================
 // 404 HANDLER
 // ==================================================
@@ -460,20 +685,23 @@ app.use(
 app.use(
     (req, res) => {
 
-        res.status(404).json({
+        res.status(404).json(
+            {
 
-            success: false,
+                success: false,
 
-            message:
-                "Endpoint tidak ditemukan",
+                message:
+                    "Endpoint tidak ditemukan",
 
-            path:
-                req.originalUrl
+                path:
+                    req.originalUrl
 
-        });
+            }
+        );
 
     }
 );
+
 
 // ==================================================
 // ERROR HANDLER
@@ -513,32 +741,126 @@ app.use(
             "================================="
         );
 
+
+        // ==========================================
+        // JIKA RESPONSE SUDAH TERKIRIM
+        // ==========================================
+
         if (
             res.headersSent
         ) {
+
             return next(err);
+
         }
 
-        res.status(
-            err.status || 500
-        ).json({
 
-            success: false,
+        // ==========================================
+        // MULTER ERROR
+        // ==========================================
 
-            message:
-                err.message ||
-                "Terjadi kesalahan pada server",
+        if (
+            err instanceof
+            multer.MulterError
+        ) {
 
-            error:
-                process.env.NODE_ENV ===
-                "development"
-                    ? err.stack
-                    : undefined
+            if (
+                err.code ===
+                "LIMIT_FILE_SIZE"
+            ) {
 
-        });
+                return res
+                    .status(400)
+                    .json(
+                        {
+
+                            success: false,
+
+                            message:
+                                "Ukuran bukti pembayaran maksimal 5 MB."
+
+                        }
+                    );
+
+            }
+
+
+            return res
+                .status(400)
+                .json(
+                    {
+
+                        success: false,
+
+                        message:
+                            `Upload file gagal: ${err.message}`
+
+                    }
+                );
+
+        }
+
+
+        // ==========================================
+        // ERROR FORMAT FILE
+        // ==========================================
+
+        if (
+            err.message &&
+            err.message.includes(
+                "Format bukti pembayaran"
+            )
+        ) {
+
+            return res
+                .status(400)
+                .json(
+                    {
+
+                        success: false,
+
+                        message:
+                            err.message
+
+                    }
+                );
+
+        }
+
+
+        // ==========================================
+        // ERROR VALIDASI UMUM
+        // ==========================================
+
+        const statusCode =
+            err.status ||
+            err.statusCode ||
+            500;
+
+
+        return res
+            .status(statusCode)
+            .json(
+                {
+
+                    success: false,
+
+                    message:
+                        err.message ||
+                        "Terjadi kesalahan pada server",
+
+                    error:
+                        process.env.NODE_ENV ===
+                        "development"
+                            ? err.stack
+                            : undefined
+
+                }
+            );
 
     }
 );
+
 
 // ==================================================
 // ERROR SERVER
@@ -566,6 +888,7 @@ server.on(
 
     }
 );
+
 
 // ==================================================
 // START SERVER
@@ -605,6 +928,7 @@ server.listen(
         console.log(
             "================================="
         );
+
 
         console.log(
             "Available endpoints:"
@@ -656,6 +980,18 @@ server.listen(
 
         console.log(
             "/api/pembayaran"
+        );
+
+        console.log(
+            "/api/denda"
+        );
+
+        console.log(
+            "/api/pembayaran-denda"
+        );
+
+        console.log(
+            "/api/pengembalian-dana"
         );
 
         console.log(

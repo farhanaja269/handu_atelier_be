@@ -1,86 +1,86 @@
-// routers/pembayaranRouter.js
+// ======================================================
+// routers/dendaRouter.js
+// ======================================================
 
 const express = require("express");
 
 const router = express.Router();
 
-const pembayaranController =
-    require("../controllers/pembayaranController");
-
-const uploadPembayaran =
-    require("../middleware/uploadPembayaran");
-
+const dendaController =
+    require("../controllers/dendaController");
 
 // ======================================================
-// GET SEMUA PEMBAYARAN
+// GET SEMUA DENDA
+// GET /denda
 // ======================================================
 
 router.get(
     "/",
-    pembayaranController.getPembayaran
+    dendaController.getDenda
 );
 
-
 // ======================================================
-// GET PEMBAYARAN BERDASARKAN PEMINJAMAN
+// GET DENDA BERDASARKAN PENGEMBALIAN
+// GET /denda/pengembalian/:idPengembalian
 // ======================================================
 
 router.get(
-    "/peminjaman/:idPeminjaman",
-    pembayaranController.getPembayaranByPeminjaman
+    "/pengembalian/:idPengembalian",
+    dendaController.getDendaByPengembalian
 );
 
-
 // ======================================================
-// GET PEMBAYARAN BERDASARKAN ID
+// GET DENDA BERDASARKAN ID
+// GET /denda/:id
 // ======================================================
 
 router.get(
     "/:id",
-    pembayaranController.getPembayaranById
+    dendaController.getDendaById
 );
 
-
 // ======================================================
-// POST PEMBAYARAN + UPLOAD BUKTI
+// CREATE DENDA
+// POST /denda
 // ======================================================
 
 router.post(
     "/",
-    uploadPembayaran.single("bukti_bayar"),
-    pembayaranController.createPembayaran
+    dendaController.createDenda
 );
 
-
 // ======================================================
-// UPDATE PEMBAYARAN + UPLOAD BUKTI
+// UPDATE DENDA
+// PUT /denda/:id
 // ======================================================
 
 router.put(
     "/:id",
-    uploadPembayaran.single("bukti_bayar"),
-    pembayaranController.updatePembayaran
+    dendaController.updateDenda
 );
 
-
 // ======================================================
-// UPDATE STATUS PEMBAYARAN
+// UPDATE STATUS DENDA
+// PUT /denda/:id/status
 // ======================================================
 
 router.put(
     "/:id/status",
-    pembayaranController.updateStatusPembayaran
+    dendaController.updateStatusDenda
 );
 
-
 // ======================================================
-// DELETE PEMBAYARAN
+// DELETE DENDA
+// DELETE /denda/:id
 // ======================================================
 
 router.delete(
     "/:id",
-    pembayaranController.deletePembayaran
+    dendaController.deleteDenda
 );
 
+// ======================================================
+// EXPORT
+// ======================================================
 
 module.exports = router;

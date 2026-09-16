@@ -11,6 +11,99 @@ const notificationModel =
 
 
 // ======================================================
+// HELPER
+// ======================================================
+
+const roundMoney = (value) => {
+    return Math.round((Number(value) + Number.EPSILON) * 100) / 100;
+};
+
+
+const isValidPositiveNumber = (value) => {
+    return (
+        value !== undefined &&
+        value !== null &&
+        value !== "" &&
+        !isNaN(value) &&
+        Number(value) > 0
+    );
+};
+
+
+// ======================================================
+// VALIDASI NOMINAL PEMBAYARAN
+// ======================================================
+//
+// Satu pembayaran untuk satu peminjaman.
+// Nominal yang diperbolehkan:
+// - 50% dari total_harga = DP
+// - 100% dari total_harga = pembayaran penuh
+//
+// Status "Lunas" di sini berarti pembayaran yang dibuat
+// sudah dibayar penuh sesuai nominal transaksi tersebut.
+// Untuk DP, berarti DP 50%-nya sudah dibayar.
+// ======================================================
+
+const validatePaymentAmount = (
+    totalPeminjaman,
+    jumlahPembayaran
+) => {
+
+    const total =
+        roundMoney(totalPeminjaman);
+
+    const jumlah =
+        roundMoney(jumlahPembayaran);
+
+    if (
+        !isValidPositiveNumber(total) ||
+        !isValidPositiveNumber(jumlah)
+    ) {
+
+        return {
+            valid: false,
+            message:
+                "Total peminjaman dan nominal pembayaran harus lebih dari 0."
+        };
+
+    }
+
+
+    const nominalDP =
+        roundMoney(total * 0.5);
+
+    const nominalLunas =
+        roundMoney(total);
+
+
+    if (
+        jumlah !== nominalDP &&
+        jumlah !== nominalLunas
+    ) {
+
+        return {
+            valid: false,
+            message:
+                `Nominal pembayaran hanya dapat berupa DP 50% sebesar Rp${nominalDP.toLocaleString("id-ID")} atau pembayaran penuh sebesar Rp${nominalLunas.toLocaleString("id-ID")}.`,
+            nominalDP,
+            nominalLunas
+        };
+
+    }
+
+
+    return {
+        valid: true,
+        isDP: jumlah === nominalDP,
+        isFull: jumlah === nominalLunas,
+        nominalDP,
+        nominalLunas
+    };
+
+};
+
+
+// ======================================================
 // GET SEMUA PEMBAYARAN
 // ======================================================
 
@@ -44,6 +137,7 @@ const getPembayaran = (
 
             }
 
+
             return res
                 .status(200)
                 .json({
@@ -70,6 +164,7 @@ const getPembayaranById = (
     const id =
         req.params.id;
 
+
     if (
         !id ||
         isNaN(id)
@@ -84,6 +179,7 @@ const getPembayaranById = (
             });
 
     }
+
 
     pembayaranModel.getPembayaranById(
         id,
@@ -111,6 +207,7 @@ const getPembayaranById = (
 
             }
 
+
             if (
                 !result ||
                 result.length === 0
@@ -125,6 +222,7 @@ const getPembayaranById = (
                     });
 
             }
+
 
             return res
                 .status(200)
@@ -152,6 +250,7 @@ const getPembayaranByPeminjaman = (
     const idPeminjaman =
         req.params.idPeminjaman;
 
+
     if (
         !idPeminjaman ||
         isNaN(idPeminjaman)
@@ -166,6 +265,7 @@ const getPembayaranByPeminjaman = (
             });
 
     }
+
 
     pembayaranModel.getPembayaranByPeminjaman(
         idPeminjaman,
@@ -192,6 +292,7 @@ const getPembayaranByPeminjaman = (
                     });
 
             }
+
 
             return res
                 .status(200)
@@ -225,7 +326,8 @@ const createPembayaran = (
     // ==================================================
 
     if (
-        !data.id_peminjaman
+        !data.id_peminjaman ||
+        isNaN(data.id_peminjaman)
     ) {
 
         return res
@@ -233,40 +335,14 @@ const createPembayaran = (
             .json({
                 success: false,
                 message:
-                    "ID peminjaman wajib diisi"
+                    "ID peminjaman wajib diisi dan harus valid."
             });
 
     }
 
 
-    // ==================================================
-    // VALIDASI STATUS PEMBAYARAN
-    // ==================================================
-
-    const allowedStatusPembayaran = [
-        "Belum Bayar",
-        "Lunas"
-    ];
-
-    const statusPembayaran =
-        data.status ||
-        "Belum Bayar";
-
-    if (
-        !allowedStatusPembayaran.includes(
-            statusPembayaran
-        )
-    ) {
-
-        return res
-            .status(400)
-            .json({
-                success: false,
-                message:
-                    "Status pembayaran tidak valid"
-            });
-
-    }
+    const idPeminjaman =
+        Number(data.id_peminjaman);
 
 
     // ==================================================
@@ -279,15 +355,15 @@ const createPembayaran = (
         "Cash"
     ];
 
+
     const metode =
         data.metode ||
         null;
 
+
     if (
         !metode ||
-        !allowedMetode.includes(
-            metode
-        )
+        !allowedMetode.includes(metode)
     ) {
 
         return res
@@ -295,7 +371,7 @@ const createPembayaran = (
             .json({
                 success: false,
                 message:
-                    "Metode pembayaran tidak valid"
+                    "Metode pembayaran tidak valid."
             });
 
     }
@@ -334,9 +410,11 @@ const createPembayaran = (
 
     // ==================================================
     // PATH BUKTI PEMBAYARAN
-    // ======================================================
+    // ==================================================
 
-    let bukti_bayar = null;
+    let bukti_bayar =
+        null;
+
 
     if (req.file) {
 
@@ -351,7 +429,7 @@ const createPembayaran = (
     // ==================================================
 
     peminjamanModel.getPeminjamanById(
-        data.id_peminjaman,
+        idPeminjaman,
         (
             loanErr,
             loanResult
@@ -407,6 +485,7 @@ const createPembayaran = (
                 "Diproses"
             ];
 
+
             if (
                 !allowedLoanStatus.includes(
                     loan.status
@@ -418,7 +497,79 @@ const createPembayaran = (
                     .json({
                         success: false,
                         message:
-                            `Pembayaran tidak dapat dibuat untuk peminjaman dengan status "${loan.status}"`
+                            `Pembayaran tidak dapat dibuat untuk peminjaman dengan status "${loan.status}".`
+                    });
+
+            }
+
+
+            // ==========================================
+            // VALIDASI TOTAL PEMINJAMAN
+            // ==========================================
+
+            const totalPeminjaman =
+                Number(loan.total_harga);
+
+
+            if (
+                !isValidPositiveNumber(
+                    totalPeminjaman
+                )
+            ) {
+
+                return res
+                    .status(400)
+                    .json({
+                        success: false,
+                        message:
+                            "Total harga peminjaman tidak valid."
+                    });
+
+            }
+
+
+            // ==========================================
+            // VALIDASI NOMINAL
+            // ==========================================
+
+            if (
+                !isValidPositiveNumber(
+                    data.total
+                )
+            ) {
+
+                return res
+                    .status(400)
+                    .json({
+                        success: false,
+                        message:
+                            "Nominal pembayaran wajib diisi dan harus lebih dari 0."
+                    });
+
+            }
+
+
+            const totalPembayaran =
+                roundMoney(data.total);
+
+
+            const paymentValidation =
+                validatePaymentAmount(
+                    totalPeminjaman,
+                    totalPembayaran
+                );
+
+
+            if (
+                !paymentValidation.valid
+            ) {
+
+                return res
+                    .status(400)
+                    .json({
+                        success: false,
+                        message:
+                            paymentValidation.message
                     });
 
             }
@@ -429,7 +580,7 @@ const createPembayaran = (
             // ==========================================
 
             pembayaranModel.checkExistingPembayaran(
-                data.id_peminjaman,
+                idPeminjaman,
                 (
                     checkErr,
                     existing
@@ -465,10 +616,29 @@ const createPembayaran = (
                             .json({
                                 success: false,
                                 message:
-                                    "Peminjaman ini sudah memiliki data pembayaran"
+                                    "Peminjaman ini sudah memiliki data pembayaran. Sistem menggunakan satu pembayaran per peminjaman."
                             });
 
                     }
+
+
+                    // ======================================
+                    // STATUS PEMBAYARAN
+                    // ======================================
+                    //
+                    // Pembayaran yang dibuat dianggap
+                    // selesai dibayar sesuai nominal transaksi.
+                    //
+                    // Jika nominal 50%:
+                    //     DP 50% sudah dibayar.
+                    //
+                    // Jika nominal 100%:
+                    //     pembayaran penuh sudah dibayar.
+                    //
+                    // ======================================
+
+                    const statusPembayaran =
+                        "Lunas";
 
 
                     // ======================================
@@ -478,18 +648,14 @@ const createPembayaran = (
                     const paymentData = {
 
                         id_peminjaman:
-                            Number(
-                                data.id_peminjaman
-                            ),
+                            idPeminjaman,
 
                         tanggal_bayar:
                             data.tanggal_bayar ||
                             null,
 
                         total:
-                            Number(
-                                data.total
-                            ) || 0,
+                            totalPembayaran,
 
                         metode:
                             metode,
@@ -539,18 +705,25 @@ const createPembayaran = (
 
 
                             // ==================================
+                            // INFORMASI JENIS PEMBAYARAN
+                            // ==================================
+
+                            const jenisPembayaran =
+                                paymentValidation.isDP
+                                    ? "DP 50%"
+                                    : "Pembayaran penuh 100%";
+
+
+                            // ==================================
                             // NOTIFIKASI ADMIN
                             // ==================================
 
                             const pesanAdmin =
-                                `Pembayaran baru untuk peminjaman #${data.id_peminjaman}. ` +
+                                `Pembayaran baru untuk peminjaman #${idPeminjaman}. ` +
+                                `Jenis pembayaran: ${jenisPembayaran}. ` +
+                                `Nominal: Rp${totalPembayaran.toLocaleString("id-ID")}. ` +
                                 `Status pembayaran: ${statusPembayaran}.`;
 
-
-                            /*
-                                Tetap menggunakan fungsi
-                                notifikasi yang ada di sistem kamu.
-                            */
 
                             notificationModel.createNotificationForAdmins(
                                 pesanAdmin,
@@ -571,63 +744,52 @@ const createPembayaran = (
 
 
                                     // ==================================
-                                    // JIKA LUNAS
+                                    // NOTIFIKASI USER
                                     // ==================================
 
-                                    if (
-                                        statusPembayaran ===
-                                        "Lunas"
-                                    ) {
-
-                                        const pesanUser =
-                                            `Pembayaran peminjaman #${data.id_peminjaman} ` +
-                                            `telah tercatat sebagai Lunas.`;
+                                    const pesanUser =
+                                        `Pembayaran untuk peminjaman #${idPeminjaman} ` +
+                                        `sebesar Rp${totalPembayaran.toLocaleString("id-ID")} ` +
+                                        `(${jenisPembayaran}) telah tercatat sebagai Lunas.`;
 
 
-                                        return notificationModel.createNotificationForUser(
-                                            loan.id_user,
-                                            pesanUser,
-                                            (
+                                    notificationModel.createNotificationForUser(
+                                        loan.id_user,
+                                        pesanUser,
+                                        (
+                                            userNotificationError
+                                        ) => {
+
+                                            if (
                                                 userNotificationError
-                                            ) => {
+                                            ) {
 
-                                                if (
+                                                console.error(
+                                                    "Gagal membuat notifikasi pembayaran ke user:",
                                                     userNotificationError
-                                                ) {
-
-                                                    console.error(
-                                                        "Gagal membuat notifikasi pembayaran ke user:",
-                                                        userNotificationError
-                                                    );
-
-                                                }
-
-
-                                                return res
-                                                    .status(201)
-                                                    .json({
-                                                        success: true,
-                                                        message:
-                                                            "Pembayaran berhasil ditambahkan",
-                                                        id_pembayaran:
-                                                            idPembayaran
-                                                    });
+                                                );
 
                                             }
-                                        );
-
-                                    }
 
 
-                                    return res
-                                        .status(201)
-                                        .json({
-                                            success: true,
-                                            message:
-                                                "Pembayaran berhasil ditambahkan",
-                                            id_pembayaran:
-                                                idPembayaran
-                                        });
+                                            return res
+                                                .status(201)
+                                                .json({
+                                                    success: true,
+                                                    message:
+                                                        "Pembayaran berhasil ditambahkan",
+                                                    id_pembayaran:
+                                                        idPembayaran,
+                                                    jenis_pembayaran:
+                                                        jenisPembayaran,
+                                                    total:
+                                                        totalPembayaran,
+                                                    status:
+                                                        statusPembayaran
+                                                });
+
+                                        }
+                                    );
 
                                 }
                             );
@@ -656,6 +818,7 @@ const updatePembayaran = (
     const id =
         req.params.id;
 
+
     if (
         !id ||
         isNaN(id)
@@ -677,127 +840,21 @@ const updatePembayaran = (
 
 
     // ==================================================
-    // VALIDASI METODE
+    // AMBIL PEMBAYARAN LAMA
     // ==================================================
 
-    const allowedMetode = [
-        "QRIS",
-        "Transfer Bank",
-        "Cash"
-    ];
-
-    const metode =
-        data.metode ||
-        null;
-
-    if (
-        !metode ||
-        !allowedMetode.includes(
-            metode
-        )
-    ) {
-
-        return res
-            .status(400)
-            .json({
-                success: false,
-                message:
-                    "Metode pembayaran tidak valid"
-            });
-
-    }
-
-
-    // ==================================================
-    // VALIDASI BUKTI
-    // ==================================================
-
-    if (
-        (
-            metode === "QRIS" ||
-            metode === "Transfer Bank"
-        ) &&
-        !req.file &&
-        !data.bukti_bayar
-    ) {
-
-        return res
-            .status(400)
-            .json({
-                success: false,
-                message:
-                    "Bukti pembayaran wajib diunggah untuk metode QRIS atau Transfer Bank."
-            });
-
-    }
-
-
-    // ==================================================
-    // SIAPKAN DATA
-    // ==================================================
-
-    const updateData = {
-
-        id_peminjaman:
-            Number(
-                data.id_peminjaman
-            ),
-
-        tanggal_bayar:
-            data.tanggal_bayar ||
-            null,
-
-        total:
-            Number(
-                data.total
-            ) || 0,
-
-        metode:
-            metode,
-
-        status:
-            data.status ||
-            "Belum Bayar"
-
-    };
-
-
-    // Jika upload baru
-    // gunakan file baru.
-
-    if (req.file) {
-
-        updateData.bukti_bayar =
-            `/uploads/pembayaran/${req.file.filename}`;
-
-    } else if (
-        data.bukti_bayar
-    ) {
-
-        // Pertahankan bukti lama
-        updateData.bukti_bayar =
-            data.bukti_bayar;
-
-    }
-
-
-    // ==================================================
-    // UPDATE DATABASE
-    // ==================================================
-
-    pembayaranModel.updatePembayaran(
+    pembayaranModel.getPembayaranById(
         id,
-        updateData,
         (
-            err,
-            result
+            paymentErr,
+            paymentResult
         ) => {
 
-            if (err) {
+            if (paymentErr) {
 
                 console.error(
-                    "Error update pembayaran:",
-                    err
+                    "Error get pembayaran:",
+                    paymentErr
                 );
 
                 return res
@@ -805,17 +862,17 @@ const updatePembayaran = (
                     .json({
                         success: false,
                         message:
-                            "Gagal memperbarui pembayaran",
+                            "Gagal mengambil data pembayaran",
                         error:
-                            err.message
+                            paymentErr.message
                     });
 
             }
 
 
             if (
-                result.affectedRows ===
-                0
+                !paymentResult ||
+                paymentResult.length === 0
             ) {
 
                 return res
@@ -829,13 +886,301 @@ const updatePembayaran = (
             }
 
 
-            return res
-                .status(200)
-                .json({
-                    success: true,
-                    message:
-                        "Pembayaran berhasil diperbarui"
-                });
+            const oldPayment =
+                paymentResult[0];
+
+
+            // ==========================================
+            // VALIDASI METODE
+            // ==========================================
+
+            const allowedMetode = [
+                "QRIS",
+                "Transfer Bank",
+                "Cash"
+            ];
+
+
+            const metode =
+                data.metode ||
+                oldPayment.metode ||
+                null;
+
+
+            if (
+                !allowedMetode.includes(
+                    metode
+                )
+            ) {
+
+                return res
+                    .status(400)
+                    .json({
+                        success: false,
+                        message:
+                            "Metode pembayaran tidak valid"
+                    });
+
+            }
+
+
+            // ==========================================
+            // AMBIL PEMINJAMAN
+            // ==========================================
+
+            peminjamanModel.getPeminjamanById(
+                oldPayment.id_peminjaman,
+                (
+                    loanErr,
+                    loanResult
+                ) => {
+
+                    if (loanErr) {
+
+                        console.error(
+                            "Error get peminjaman pembayaran:",
+                            loanErr
+                        );
+
+                        return res
+                            .status(500)
+                            .json({
+                                success: false,
+                                message:
+                                    "Gagal mengambil data peminjaman",
+                                error:
+                                    loanErr.message
+                            });
+
+                    }
+
+
+                    if (
+                        !loanResult ||
+                        loanResult.length === 0
+                    ) {
+
+                        return res
+                            .status(404)
+                            .json({
+                                success: false,
+                                message:
+                                    "Peminjaman tidak ditemukan"
+                            });
+
+                    }
+
+
+                    const loan =
+                        loanResult[0];
+
+
+                    // ==========================================
+                    // NOMINAL PEMBAYARAN
+                    // ==========================================
+
+                    const totalPeminjaman =
+                        Number(
+                            loan.total_harga
+                        );
+
+
+                    const totalPembayaran =
+                        data.total !== undefined &&
+                        data.total !== null &&
+                        data.total !== ""
+                            ? roundMoney(data.total)
+                            : roundMoney(
+                                oldPayment.total
+                            );
+
+
+                    const paymentValidation =
+                        validatePaymentAmount(
+                            totalPeminjaman,
+                            totalPembayaran
+                        );
+
+
+                    if (
+                        !paymentValidation.valid
+                    ) {
+
+                        return res
+                            .status(400)
+                            .json({
+                                success: false,
+                                message:
+                                    paymentValidation.message
+                            });
+
+                    }
+
+
+                    // ==========================================
+                    // VALIDASI BUKTI
+                    // ==========================================
+
+                    if (
+                        (
+                            metode === "QRIS" ||
+                            metode === "Transfer Bank"
+                        ) &&
+                        !req.file &&
+                        !oldPayment.bukti_bayar &&
+                        !data.bukti_bayar
+                    ) {
+
+                        return res
+                            .status(400)
+                            .json({
+                                success: false,
+                                message:
+                                    "Bukti pembayaran wajib diunggah untuk metode QRIS atau Transfer Bank."
+                            });
+
+                    }
+
+
+                    // ==========================================
+                    // STATUS
+                    // ==========================================
+                    //
+                    // Tidak menerima status pembayaran dari
+                    // frontend secara bebas.
+                    //
+                    // Pembayaran yang nominalnya valid dianggap
+                    // sudah dibayar sesuai transaksi tersebut.
+                    // ==========================================
+
+                    const statusPembayaran =
+                        "Lunas";
+
+
+                    // ==========================================
+                    // SIAPKAN DATA
+                    // ==========================================
+
+                    const updateData = {
+
+                        id_peminjaman:
+                            oldPayment.id_peminjaman,
+
+                        tanggal_bayar:
+                            data.tanggal_bayar ||
+                            oldPayment.tanggal_bayar ||
+                            null,
+
+                        total:
+                            totalPembayaran,
+
+                        metode:
+                            metode,
+
+                        status:
+                            statusPembayaran
+
+                    };
+
+
+                    // ==========================================
+                    // BUKTI PEMBAYARAN
+                    // ==========================================
+
+                    if (req.file) {
+
+                        updateData.bukti_bayar =
+                            `/uploads/pembayaran/${req.file.filename}`;
+
+                    } else if (
+                        data.bukti_bayar
+                    ) {
+
+                        updateData.bukti_bayar =
+                            data.bukti_bayar;
+
+                    } else {
+
+                        updateData.bukti_bayar =
+                            oldPayment.bukti_bayar ||
+                            null;
+
+                    }
+
+
+                    // ==========================================
+                    // UPDATE DATABASE
+                    // ==========================================
+
+                    pembayaranModel.updatePembayaran(
+                        id,
+                        updateData,
+                        (
+                            err,
+                            result
+                        ) => {
+
+                            if (err) {
+
+                                console.error(
+                                    "Error update pembayaran:",
+                                    err
+                                );
+
+                                return res
+                                    .status(500)
+                                    .json({
+                                        success: false,
+                                        message:
+                                            "Gagal memperbarui pembayaran",
+                                        error:
+                                            err.message
+                                    });
+
+                            }
+
+
+                            if (
+                                result.affectedRows ===
+                                0
+                            ) {
+
+                                return res
+                                    .status(404)
+                                    .json({
+                                        success: false,
+                                        message:
+                                            "Pembayaran tidak ditemukan"
+                                    });
+
+                            }
+
+
+                            const jenisPembayaran =
+                                paymentValidation.isDP
+                                    ? "DP 50%"
+                                    : "Pembayaran penuh 100%";
+
+
+                            return res
+                                .status(200)
+                                .json({
+                                    success: true,
+                                    message:
+                                        "Pembayaran berhasil diperbarui",
+                                    jenis_pembayaran:
+                                        jenisPembayaran,
+                                    total:
+                                        totalPembayaran,
+                                    status:
+                                        statusPembayaran
+                                });
+
+                        }
+                    );
+
+                }
+            );
 
         }
     );
@@ -846,6 +1191,16 @@ const updatePembayaran = (
 // ======================================================
 // UPDATE STATUS PEMBAYARAN
 // ======================================================
+//
+// Status hanya boleh:
+// - Belum Bayar
+// - Lunas
+//
+// Untuk menjaga konsistensi dengan sistem refund,
+// pembayaran yang sudah tercatat sebagai Lunas dapat
+// digunakan sebagai dasar pengembalian dana.
+//
+// ======================================================
 
 const updateStatusPembayaran = (
     req,
@@ -855,20 +1210,34 @@ const updateStatusPembayaran = (
     const id =
         req.params.id;
 
+
     const {
         status
     } =
-        req.body;
+        req.body || {};
 
 
-    // ==================================================
-    // VALIDASI STATUS
-    // ==================================================
+    if (
+        !id ||
+        isNaN(id)
+    ) {
+
+        return res
+            .status(400)
+            .json({
+                success: false,
+                message:
+                    "ID pembayaran tidak valid"
+            });
+
+    }
+
 
     const allowedStatus = [
         "Belum Bayar",
         "Lunas"
     ];
+
 
     if (
         !allowedStatus.includes(
@@ -990,6 +1359,63 @@ const updateStatusPembayaran = (
 
 
                     // ==========================================
+                    // VALIDASI NOMINAL
+                    // ==========================================
+
+                    const validation =
+                        validatePaymentAmount(
+                            Number(loan.total_harga),
+                            Number(payment.total)
+                        );
+
+
+                    if (
+                        !validation.valid
+                    ) {
+
+                        return res
+                            .status(400)
+                            .json({
+                                success: false,
+                                message:
+                                    "Nominal pembayaran yang tersimpan tidak sesuai dengan aturan DP 50% atau pembayaran penuh 100%."
+                            });
+
+                    }
+
+
+                    // ==========================================
+                    // CEGAH PEMBAYARAN DIBALIK KE BELUM BAYAR
+                    // JIKA SUDAH ADA REFUND
+                    // ==========================================
+
+                    if (
+                        status === "Belum Bayar" &&
+                        payment.status === "Lunas"
+                    ) {
+
+                        /*
+                            Untuk menjaga konsistensi sistem,
+                            status Lunas tidak boleh sembarang
+                            dikembalikan menjadi Belum Bayar.
+
+                            Jika memang ada kesalahan pembayaran,
+                            perubahan harus dilakukan melalui
+                            proses administrasi pembayaran/refund.
+                        */
+
+                        return res
+                            .status(400)
+                            .json({
+                                success: false,
+                                message:
+                                    "Pembayaran yang sudah Lunas tidak dapat diubah kembali menjadi Belum Bayar melalui endpoint ini."
+                            });
+
+                    }
+
+
+                    // ==========================================
                     // UPDATE STATUS
                     // ==========================================
 
@@ -1101,18 +1527,38 @@ const deletePembayaran = (
         req.params.id;
 
 
-    pembayaranModel.deletePembayaran(
+    if (
+        !id ||
+        isNaN(id)
+    ) {
+
+        return res
+            .status(400)
+            .json({
+                success: false,
+                message:
+                    "ID pembayaran tidak valid"
+            });
+
+    }
+
+
+    // ==================================================
+    // AMBIL PEMBAYARAN
+    // ==================================================
+
+    pembayaranModel.getPembayaranById(
         id,
         (
-            err,
-            result
+            paymentErr,
+            paymentResult
         ) => {
 
-            if (err) {
+            if (paymentErr) {
 
                 console.error(
-                    "Error delete pembayaran:",
-                    err
+                    "Error get pembayaran sebelum delete:",
+                    paymentErr
                 );
 
                 return res
@@ -1120,17 +1566,17 @@ const deletePembayaran = (
                     .json({
                         success: false,
                         message:
-                            "Gagal menghapus pembayaran",
+                            "Gagal mengambil data pembayaran",
                         error:
-                            err.message
+                            paymentErr.message
                     });
 
             }
 
 
             if (
-                result.affectedRows ===
-                0
+                !paymentResult ||
+                paymentResult.length === 0
             ) {
 
                 return res
@@ -1144,13 +1590,84 @@ const deletePembayaran = (
             }
 
 
-            return res
-                .status(200)
-                .json({
-                    success: true,
-                    message:
-                        "Pembayaran berhasil dihapus"
-                });
+            const payment =
+                paymentResult[0];
+
+
+            // ==================================================
+            // PEMBAYARAN YANG SUDAH LUNAS TIDAK BOLEH DIHAPUS
+            // SEMBARANGAN
+            // ==================================================
+
+            if (
+                payment.status ===
+                "Lunas"
+            ) {
+
+                return res
+                    .status(400)
+                    .json({
+                        success: false,
+                        message:
+                            "Pembayaran yang sudah Lunas tidak dapat dihapus."
+                    });
+
+            }
+
+
+            pembayaranModel.deletePembayaran(
+                id,
+                (
+                    err,
+                    result
+                ) => {
+
+                    if (err) {
+
+                        console.error(
+                            "Error delete pembayaran:",
+                            err
+                        );
+
+                        return res
+                            .status(500)
+                            .json({
+                                success: false,
+                                message:
+                                    "Gagal menghapus pembayaran",
+                                error:
+                                    err.message
+                            });
+
+                    }
+
+
+                    if (
+                        result.affectedRows ===
+                        0
+                    ) {
+
+                        return res
+                            .status(404)
+                            .json({
+                                success: false,
+                                message:
+                                    "Pembayaran tidak ditemukan"
+                            });
+
+                    }
+
+
+                    return res
+                        .status(200)
+                        .json({
+                            success: true,
+                            message:
+                                "Pembayaran berhasil dihapus"
+                        });
+
+                }
+            );
 
         }
     );
