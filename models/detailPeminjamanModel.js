@@ -2,10 +2,12 @@
 // models/detailPeminjamanModel.js
 // ======================================================
 
-const db = require("../config/db");
+const db =
+    require("../config/db");
 
 // ======================================================
-// GET DETAIL PEMINJAMAN BERDASARKAN ID PEMINJAMAN + USER
+// GET DETAIL PEMINJAMAN BERDASARKAN
+// ID PEMINJAMAN + USER
 // ======================================================
 
 const getDetailPeminjamanById = (
@@ -37,8 +39,8 @@ const getDetailPeminjamanById = (
             k.foto,
             k.harga_sewa,
             k.deskripsi,
-            k.id_koleksi,
 
+            k.id_koleksi,
             ko.nama_koleksi,
 
             pg.id_pengembalian,
@@ -53,19 +55,24 @@ const getDetailPeminjamanById = (
         FROM peminjaman p
 
         INNER JOIN detail_peminjaman d
-            ON p.id_peminjaman = d.id_peminjaman
+            ON p.id_peminjaman =
+               d.id_peminjaman
 
         INNER JOIN kostum k
-            ON d.id_kostum = k.id_kostum
+            ON d.id_kostum =
+               k.id_kostum
 
         LEFT JOIN koleksi ko
-            ON k.id_koleksi = ko.id_koleksi
+            ON k.id_koleksi =
+               ko.id_koleksi
 
         LEFT JOIN pengembalian pg
-            ON p.id_peminjaman = pg.id_peminjaman
+            ON p.id_peminjaman =
+               pg.id_peminjaman
 
         LEFT JOIN petugas pt
-            ON pg.diterima_oleh = pt.id_petugas
+            ON pg.diterima_oleh =
+               pt.id_petugas
 
         WHERE
             p.id_peminjaman = ?
@@ -86,7 +93,8 @@ const getDetailPeminjamanById = (
 };
 
 // ======================================================
-// GET SEMUA DETAIL BERDASARKAN ID PEMINJAMAN
+// GET SEMUA DETAIL BERDASARKAN
+// ID PEMINJAMAN
 // ======================================================
 
 const getDetailsByPeminjaman = (
@@ -102,14 +110,21 @@ const getDetailsByPeminjaman = (
             jumlah,
             harga,
             subtotal
+
         FROM detail_peminjaman
-        WHERE id_peminjaman = ?
-        ORDER BY id_detail ASC
+
+        WHERE
+            id_peminjaman = ?
+
+        ORDER BY
+            id_detail ASC
     `;
 
     db.query(
         sql,
-        [Number(idPeminjaman)],
+        [
+            Number(idPeminjaman),
+        ],
         callback
     );
 };
@@ -118,22 +133,18 @@ const getDetailsByPeminjaman = (
 // CREATE DETAIL PEMINJAMAN
 // ======================================================
 //
-// TIDAK MENGUBAH STOK.
+// PENTING:
 //
-// Stok hanya berubah ketika:
+// Fungsi ini HANYA membuat detail.
 //
-// Disetujui
-//      ↓
-// Diproses
-//      ↓
-// stok berkurang
+// TIDAK mengurangi stok.
 //
-// Pengembalian:
-// Diproses
-//      ↓
-// Selesai
-//      ↓
-// stok bertambah
+// Stok baru dikurangi ketika:
+//
+// Disetujui -> Diproses
+//
+// melalui:
+// controllers/peminjamanController.js
 //
 // ======================================================
 
@@ -143,61 +154,118 @@ const createDetailPeminjaman = (
 ) => {
 
     const idPeminjaman =
-        Number(data.id_peminjaman);
+        Number(
+            data.id_peminjaman
+        );
 
     const idKostum =
-        Number(data.id_kostum);
+        Number(
+            data.id_kostum
+        );
 
     const jumlah =
-        Number(data.jumlah);
+        Number(
+            data.jumlah
+        );
 
     const harga =
-        Number(data.harga);
+        Number(
+            data.harga
+        );
 
     const subtotal =
-        Number(data.subtotal);
+        Number(
+            data.subtotal
+        );
 
     // ==================================================
-    // VALIDASI
+    // VALIDASI ID PEMINJAMAN
     // ==================================================
 
     if (
         !idPeminjaman ||
-        !idKostum ||
-        !jumlah ||
-        jumlah <= 0
+        Number.isNaN(
+            idPeminjaman
+        )
     ) {
         return callback(
             new Error(
-                "Data detail peminjaman tidak valid."
-            )
-        );
-    }
-
-    if (
-        isNaN(harga) ||
-        harga < 0
-    ) {
-        return callback(
-            new Error(
-                "Harga detail peminjaman tidak valid."
-            )
-        );
-    }
-
-    if (
-        isNaN(subtotal) ||
-        subtotal < 0
-    ) {
-        return callback(
-            new Error(
-                "Subtotal detail peminjaman tidak valid."
+                "ID peminjaman tidak valid."
             )
         );
     }
 
     // ==================================================
-    // INSERT
+    // VALIDASI ID KOSTUM
+    // ==================================================
+
+    if (
+        !idKostum ||
+        Number.isNaN(
+            idKostum
+        )
+    ) {
+        return callback(
+            new Error(
+                "ID kostum tidak valid."
+            )
+        );
+    }
+
+    // ==================================================
+    // VALIDASI JUMLAH
+    // ==================================================
+
+    if (
+        !jumlah ||
+        Number.isNaN(
+            jumlah
+        ) ||
+        jumlah <= 0
+    ) {
+        return callback(
+            new Error(
+                "Jumlah kostum tidak valid."
+            )
+        );
+    }
+
+    // ==================================================
+    // VALIDASI HARGA
+    // ==================================================
+
+    if (
+        Number.isNaN(
+            harga
+        ) ||
+        harga < 0
+    ) {
+        return callback(
+            new Error(
+                "Harga kostum tidak valid."
+            )
+        );
+    }
+
+    // ==================================================
+    // VALIDASI SUBTOTAL
+    // ==================================================
+
+    if (
+        Number.isNaN(
+            subtotal
+        ) ||
+        subtotal < 0
+    ) {
+        return callback(
+            new Error(
+                "Subtotal tidak valid."
+            )
+        );
+    }
+
+    // ==================================================
+    // INSERT DETAIL
     // ==================================================
 
     const sql = `
@@ -209,7 +277,8 @@ const createDetailPeminjaman = (
             harga,
             subtotal
         )
-        VALUES (?, ?, ?, ?, ?)
+        VALUES
+        (?, ?, ?, ?, ?)
     `;
 
     db.query(
@@ -225,14 +294,16 @@ const createDetailPeminjaman = (
 
             if (err) {
                 console.error(
-                    "Gagal membuat detail peminjaman:",
+                    "ERROR INSERT DETAIL PEMINJAMAN:",
                     err
                 );
 
-                return callback(err);
+                return callback(
+                    err
+                );
             }
 
-            callback(
+            return callback(
                 null,
                 result
             );

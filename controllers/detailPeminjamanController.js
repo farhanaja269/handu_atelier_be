@@ -9,6 +9,167 @@ const peminjamanModel =
     require("../models/peminjamanModel");
 
 // ======================================================
+// HELPER NORMALISASI TANGGAL
+// ======================================================
+//
+// Fungsi ini menangani beberapa bentuk tanggal:
+//
+// YYYY-MM-DD
+// YYYY-MM-DD HH:mm:ss
+// Date object dari MySQL
+// ISO datetime
+//
+// Hasil akhirnya selalu:
+// YYYY-MM-DD
+// ======================================================
+
+const normalizeDateOnly = (value) => {
+    if (value === null || value === undefined) {
+        return null;
+    }
+
+    // Jika dari MySQL berupa Date object
+    if (value instanceof Date) {
+        if (Number.isNaN(value.getTime())) {
+            return null;
+        }
+
+        const year =
+            value.getFullYear();
+
+        const month =
+            String(
+                value.getMonth() + 1
+            ).padStart(2, "0");
+
+        const day =
+            String(
+                value.getDate()
+            ).padStart(2, "0");
+
+        return `${year}-${month}-${day}`;
+    }
+
+    const text =
+        String(value).trim();
+
+    if (!text) {
+        return null;
+    }
+
+    // Jika sudah YYYY-MM-DD
+    const matchDate =
+        text.match(
+            /^(\d{4})-(\d{2})-(\d{2})/
+        );
+
+    if (matchDate) {
+        const year =
+            Number(matchDate[1]);
+
+        const month =
+            Number(matchDate[2]);
+
+        const day =
+            Number(matchDate[3]);
+
+        // Validasi tanggal secara nyata
+        const testDate =
+            new Date(
+                year,
+                month - 1,
+                day
+            );
+
+        if (
+            testDate.getFullYear() !== year ||
+            testDate.getMonth() !== month - 1 ||
+            testDate.getDate() !== day
+        ) {
+            return null;
+        }
+
+        return `${year}-${String(month).padStart(
+            2,
+            "0"
+        )}-${String(day).padStart(
+            2,
+            "0"
+        )}`;
+    }
+
+    // Fallback jika format lainnya
+    const parsed =
+        new Date(text);
+
+    if (
+        Number.isNaN(
+            parsed.getTime()
+        )
+    ) {
+        return null;
+    }
+
+    const year =
+        parsed.getFullYear();
+
+    const month =
+        String(
+            parsed.getMonth() + 1
+        ).padStart(2, "0");
+
+    const day =
+        String(
+            parsed.getDate()
+        ).padStart(2, "0");
+
+    return `${year}-${month}-${day}`;
+};
+
+// ======================================================
+// VALIDASI RENTANG TANGGAL
+// ======================================================
+
+const validateDateRange = (
+    tanggalPeminjaman,
+    tanggalKembali
+) => {
+    const start =
+        normalizeDateOnly(
+            tanggalPeminjaman
+        );
+
+    const end =
+        normalizeDateOnly(
+            tanggalKembali
+        );
+
+    if (!start || !end) {
+        return {
+            valid: false,
+            message:
+                "Tanggal peminjaman tidak valid",
+        };
+    }
+
+    // Karena format sudah YYYY-MM-DD,
+    // perbandingan string aman.
+    if (end <= start) {
+        return {
+            valid: false,
+            message:
+                "Tanggal kembali harus setelah tanggal peminjaman",
+        };
+    }
+
+    return {
+        valid: true,
+        start,
+        end,
+    };
+};
+
+// ======================================================
 // GET DETAIL PEMINJAMAN BY ID + USER
 // ======================================================
 
@@ -16,7 +177,6 @@ const getDetailPeminjamanById = (
     req,
     res
 ) => {
-
     const idPeminjaman =
         Number(req.params.id);
 
@@ -29,7 +189,7 @@ const getDetailPeminjamanById = (
 
     if (
         !idPeminjaman ||
-        isNaN(idPeminjaman)
+        Number.isNaN(idPeminjaman)
     ) {
         return res.status(400).json({
             success: false,
@@ -44,7 +204,7 @@ const getDetailPeminjamanById = (
 
     if (
         !idUser ||
-        isNaN(idUser)
+        Number.isNaN(idUser)
     ) {
         return res.status(400).json({
             success: false,
@@ -61,7 +221,6 @@ const getDetailPeminjamanById = (
         idPeminjaman,
         idUser,
         (err, result) => {
-
             if (err) {
                 console.error(
                     "ERROR GET DETAIL PEMINJAMAN USER:",
@@ -104,24 +263,33 @@ const createDetailPeminjaman = (
     req,
     res
 ) => {
-
     const data =
         req.body || {};
 
     const idPeminjaman =
-        Number(data.id_peminjaman);
+        Number(
+            data.id_peminjaman
+        );
 
     const idKostum =
-        Number(data.id_kostum);
+        Number(
+            data.id_kostum
+        );
 
     const jumlah =
-        Number(data.jumlah);
+        Number(
+            data.jumlah
+        );
 
     const harga =
-        Number(data.harga);
+        Number(
+            data.harga
+        );
 
     const subtotal =
-        Number(data.subtotal);
+        Number(
+            data.subtotal
+        );
 
     // ==================================================
     // VALIDASI ID PEMINJAMAN
@@ -129,7 +297,7 @@ const createDetailPeminjaman = (
 
     if (
         !idPeminjaman ||
-        isNaN(idPeminjaman)
+        Number.isNaN(idPeminjaman)
     ) {
         return res.status(400).json({
             success: false,
@@ -144,7 +312,7 @@ const createDetailPeminjaman = (
 
     if (
         !idKostum ||
-        isNaN(idKostum)
+        Number.isNaN(idKostum)
     ) {
         return res.status(400).json({
             success: false,
@@ -159,7 +327,7 @@ const createDetailPeminjaman = (
 
     if (
         !jumlah ||
-        isNaN(jumlah) ||
+        Number.isNaN(jumlah) ||
         jumlah <= 0
     ) {
         return res.status(400).json({
@@ -174,7 +342,7 @@ const createDetailPeminjaman = (
     // ==================================================
 
     if (
-        isNaN(harga) ||
+        Number.isNaN(harga) ||
         harga < 0
     ) {
         return res.status(400).json({
@@ -189,7 +357,7 @@ const createDetailPeminjaman = (
     // ==================================================
 
     if (
-        isNaN(subtotal) ||
+        Number.isNaN(subtotal) ||
         subtotal < 0
     ) {
         return res.status(400).json({
@@ -200,13 +368,15 @@ const createDetailPeminjaman = (
     }
 
     // ==================================================
-    // CEK PEMINJAMAN
+    // CEK DATA PEMINJAMAN
     // ==================================================
 
     peminjamanModel.getPeminjamanById(
         idPeminjaman,
-        (loanErr, loanResult) => {
-
+        (
+            loanErr,
+            loanResult
+        ) => {
             if (loanErr) {
                 console.error(
                     "ERROR CEK PEMINJAMAN:",
@@ -240,63 +410,53 @@ const createDetailPeminjaman = (
             // VALIDASI TANGGAL PEMINJAMAN
             // ==================================================
 
-            if (
-                !loan.tanggal_peminjaman ||
-                !loan.tanggal_kembali
-            ) {
-                return res.status(400).json({
-                    success: false,
-                    message:
-                        "Tanggal peminjaman tidak lengkap",
-                });
-            }
-
-            const tanggalPeminjaman =
-                loan.tanggal_peminjaman;
-
-            const tanggalKembali =
-                loan.tanggal_kembali;
-
-            const startDate =
-                new Date(
-                    `${tanggalPeminjaman}T00:00:00`
-                );
-
-            const endDate =
-                new Date(
-                    `${tanggalKembali}T00:00:00`
+            const dateValidation =
+                validateDateRange(
+                    loan.tanggal_peminjaman,
+                    loan.tanggal_kembali
                 );
 
             if (
-                isNaN(startDate.getTime()) ||
-                isNaN(endDate.getTime())
+                !dateValidation.valid
             ) {
-                return res.status(400).json({
-                    success: false,
-                    message:
-                        "Tanggal peminjaman tidak valid",
-                });
-            }
+                console.error(
+                    "VALIDASI TANGGAL DETAIL GAGAL:",
+                    {
+                        idPeminjaman,
+                        tanggal_peminjaman:
+                            loan.tanggal_peminjaman,
+                        tanggal_kembali:
+                            loan.tanggal_kembali,
+                        tanggalPeminjamanNormal:
+                            normalizeDateOnly(
+                                loan.tanggal_peminjaman
+                            ),
+                        tanggalKembaliNormal:
+                            normalizeDateOnly(
+                                loan.tanggal_kembali
+                            ),
+                    }
+                );
 
-            if (
-                endDate <= startDate
-            ) {
                 return res.status(400).json({
                     success: false,
                     message:
-                        "Tanggal kembali harus setelah tanggal peminjaman",
+                        dateValidation.message,
                 });
             }
 
             // ==================================================
-            // DETAIL HANYA BOLEH DITAMBAHKAN SEBELUM DIPROSES
+            // DETAIL HANYA BOLEH DITAMBAHKAN
+            // SAAT STATUS MENUNGGU / DISETUJUI
             // ==================================================
 
             if (
                 ![
                     "Menunggu",
                     "Disetujui",
-                ].includes(loan.status)
+                ].includes(
+                    loan.status
+                )
             ) {
                 return res.status(400).json({
                     success: false,
@@ -306,122 +466,134 @@ const createDetailPeminjaman = (
             }
 
             // ==================================================
-            // CEK DETAIL DUPLIKAT
+            // CEK KETERSEDIAAN KOSTUM
+            // ==================================================
+            //
+            // Penting:
+            // Di sini kita hanya melakukan pengecekan.
+            //
+            // STOK FISIK TIDAK DIKURANGI.
+            //
+            // Stok baru dikurangi ketika:
+            //
+            // Disetujui -> Diproses
+            //
             // ==================================================
 
-            detailPeminjamanModel.getDetailsByPeminjaman(
+            peminjamanModel.checkKostumAvailability(
+                idKostum,
+                dateValidation.start,
+                dateValidation.end,
+                jumlah,
                 idPeminjaman,
-                (detailErr, existingDetails) => {
-
-                    if (detailErr) {
+                (
+                    availabilityErr,
+                    availabilityResult
+                ) => {
+                    if (
+                        availabilityErr
+                    ) {
                         console.error(
-                            "ERROR CEK DETAIL PEMINJAMAN:",
-                            detailErr
+                            "ERROR CEK KETERSEDIAAN KOSTUM:",
+                            availabilityErr
                         );
 
                         return res.status(500).json({
                             success: false,
                             message:
-                                "Gagal memeriksa detail peminjaman",
+                                "Gagal mengecek ketersediaan kostum",
                             error:
-                                detailErr.message,
+                                availabilityErr.message,
                         });
                     }
 
                     // ==================================================
-                    // CEGAH KOSTUM YANG SAMA
+                    // CEK HASIL KETERSEDIAAN
                     // ==================================================
 
-                    const duplicate =
-                        (existingDetails || []).some(
-                            (detail) =>
-                                Number(
-                                    detail.id_kostum
-                                ) === idKostum
-                        );
+                    if (
+                        !availabilityResult
+                    ) {
+                        return res.status(500).json({
+                            success: false,
+                            message:
+                                "Hasil pengecekan ketersediaan kostum tidak tersedia",
+                        });
+                    }
 
-                    if (duplicate) {
+                    if (
+                        availabilityResult.tersedia === false
+                    ) {
                         return res.status(409).json({
                             success: false,
                             message:
-                                "Kostum tersebut sudah ada dalam detail peminjaman ini",
+                                availabilityResult.message ||
+                                "Kostum tidak tersedia pada tanggal tersebut.",
+                            data:
+                                availabilityResult,
                         });
                     }
 
                     // ==================================================
-                    // CEK KETERSEDIAAN KOSTUM
-                    // ==================================================
-                    //
-                    // PENTING:
-                    // Pengecekan dilakukan di BACKEND.
-                    //
-                    // Parameter:
-                    // idKostum
-                    // tanggalPeminjaman
-                    // tanggalKembali
-                    // jumlah
-                    //
-                    // Jika stok untuk tanggal tersebut tidak cukup,
-                    // detail TIDAK akan dimasukkan ke database.
+                    // CEK DETAIL DUPLIKAT
                     // ==================================================
 
-                    peminjamanModel.checkKostumAvailability(
-                        idKostum,
-                        tanggalPeminjaman,
-                        tanggalKembali,
-                        jumlah,
-                        null,
-                        (availabilityErr, availability) => {
-
-                            if (availabilityErr) {
+                    detailPeminjamanModel.getDetailsByPeminjaman(
+                        idPeminjaman,
+                        (
+                            detailErr,
+                            existingDetails
+                        ) => {
+                            if (
+                                detailErr
+                            ) {
                                 console.error(
-                                    "ERROR CEK AVAILABILITY KOSTUM:",
-                                    availabilityErr
+                                    "ERROR CEK DETAIL PEMINJAMAN:",
+                                    detailErr
                                 );
 
                                 return res.status(500).json({
                                     success: false,
                                     message:
-                                        "Gagal memeriksa ketersediaan kostum",
+                                        "Gagal memeriksa detail peminjaman",
                                     error:
-                                        availabilityErr.message,
+                                        detailErr.message,
                                 });
                             }
 
                             // ==================================================
-                            // KOSTUM TIDAK TERSEDIA
+                            // CEGAH KOSTUM YANG SAMA
                             // ==================================================
 
-                            if (
-                                !availability ||
-                                availability.tersedia !== true
-                            ) {
+                            const duplicate =
+                                (
+                                    existingDetails ||
+                                    []
+                                ).some(
+                                    (
+                                        detail
+                                    ) =>
+                                        Number(
+                                            detail.id_kostum
+                                        ) ===
+                                        idKostum
+                                );
 
+                            if (
+                                duplicate
+                            ) {
                                 return res.status(409).json({
                                     success: false,
                                     message:
-                                        "Kostum tidak tersedia untuk tanggal peminjaman tersebut.",
-                                    stok_fisik:
-                                        Number(
-                                            availability?.stok_fisik || 0
-                                        ),
-                                    jumlah_terpesan:
-                                        Number(
-                                            availability?.jumlah_terpesan || 0
-                                        ),
-                                    stok_tersedia:
-                                        Number(
-                                            availability?.stok_tersedia || 0
-                                        ),
+                                        "Kostum tersebut sudah ada dalam detail peminjaman ini",
                                 });
                             }
 
                             // ==================================================
-                            // DATA YANG AKAN DISIMPAN
+                            // DATA DETAIL
                             // ==================================================
 
                             const detailData = {
-
                                 id_peminjaman:
                                     idPeminjaman,
 
@@ -435,15 +607,24 @@ const createDetailPeminjaman = (
                                 subtotal,
                             };
 
+                            console.log(
+                                "DATA DETAIL YANG AKAN DISIMPAN:",
+                                detailData
+                            );
+
                             // ==================================================
                             // INSERT DETAIL
                             // ==================================================
 
                             detailPeminjamanModel.createDetailPeminjaman(
                                 detailData,
-                                (err, result) => {
-
-                                    if (err) {
+                                (
+                                    err,
+                                    result
+                                ) => {
+                                    if (
+                                        err
+                                    ) {
                                         console.error(
                                             "ERROR CREATE DETAIL PEMINJAMAN:",
                                             err

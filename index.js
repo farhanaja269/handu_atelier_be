@@ -5,19 +5,14 @@
 require("dotenv").config();
 
 const express = require("express");
-
 const cors = require("cors");
-
 const path = require("path");
-
 const http = require("http");
-
 const multer = require("multer");
 
 const {
     Server
 } = require("socket.io");
-
 
 const app = express();
 
@@ -47,7 +42,6 @@ const io =
         server,
         {
             cors: {
-
                 origin: true,
 
                 methods: [
@@ -59,7 +53,6 @@ const io =
                 ],
 
                 credentials: true
-
             },
 
             transports: [
@@ -96,35 +89,28 @@ io.on(
                         id_percakapan
                     );
 
-
                 if (
                     !Number.isInteger(id) ||
                     id <= 0
                 ) {
-
                     console.log(
                         "ID percakapan tidak valid:",
                         id_percakapan
                     );
 
                     return;
-
                 }
-
 
                 const room =
                     `conversation:${id}`;
-
 
                 socket.join(
                     room
                 );
 
-
                 console.log(
                     `Socket ${socket.id} masuk ${room}`
                 );
-
             }
         );
 
@@ -142,30 +128,23 @@ io.on(
                         id_percakapan
                     );
 
-
                 if (
                     !Number.isInteger(id) ||
                     id <= 0
                 ) {
-
                     return;
-
                 }
-
 
                 const room =
                     `conversation:${id}`;
-
 
                 socket.leave(
                     room
                 );
 
-
                 console.log(
                     `Socket ${socket.id} keluar ${room}`
                 );
-
             }
         );
 
@@ -181,10 +160,8 @@ io.on(
                 console.log(
                     `Socket terputus: ${socket.id} - ${reason}`
                 );
-
             }
         );
-
     }
 );
 
@@ -212,7 +189,6 @@ app.use(
     cors(
         {
             origin: true,
-
             credentials: true
         }
     )
@@ -231,12 +207,10 @@ app.use(
     )
 );
 
-
 app.use(
     express.urlencoded(
         {
             extended: true,
-
             limit: "10mb"
         }
     )
@@ -261,78 +235,65 @@ const usersRouter =
         "./routers/usersRouter"
     );
 
-
 const adminRouter =
     require(
         "./routers/adminRouter"
     );
-
 
 const petugasRouter =
     require(
         "./routers/petugasRouter"
     );
 
-
 const kategoriRouter =
     require(
         "./routers/kategoriRouter"
     );
-
 
 const kostumRouter =
     require(
         "./routers/kostumRouter"
     );
 
-
 const koleksiRouter =
     require(
         "./routers/koleksiRouter"
     );
-
 
 const registrasiRouter =
     require(
         "./routers/registrasiRouter"
     );
 
-
 const peminjamanRouter =
     require(
         "./routers/peminjamanRouter"
     );
-
 
 const detailPeminjamanRouter =
     require(
         "./routers/detailPeminjamanRouter"
     );
 
-
 const pengembalianRouter =
     require(
         "./routers/pengembalianRouter"
     );
-
 
 const pembayaranRouter =
     require(
         "./routers/pembayaranRouter"
     );
 
-
 const notificationRouter =
     require(
         "./routers/notificationRouter"
     );
 
-
 const pengaturanPembayaranRouter =
     require(
         "./routers/pengaturanPembayaranRouter"
     );
-
 
 const chatRouter =
     require(
@@ -371,6 +332,16 @@ const pengembalianDanaRouter =
 
 
 // ==================================================
+// ROUTER DOKUMEN JAMINAN
+// ==================================================
+
+const dokumenJaminanRouter =
+    require(
+        "./routers/dokumenJaminanRouter"
+    );
+
+
+// ==================================================
 // CHAT CONTROLLER
 // ==================================================
 
@@ -399,72 +370,60 @@ app.use(
     usersRouter
 );
 
-
 app.use(
     "/api/admin",
     adminRouter
 );
-
 
 app.use(
     "/api/petugas",
     petugasRouter
 );
 
-
 app.use(
     "/api/kategori",
     kategoriRouter
 );
-
 
 app.use(
     "/api/kostum",
     kostumRouter
 );
 
-
 app.use(
     "/api/koleksi",
     koleksiRouter
 );
-
 
 app.use(
     "/api/registrasi",
     registrasiRouter
 );
 
-
 app.use(
     "/api/peminjaman",
     peminjamanRouter
 );
-
 
 app.use(
     "/api/detail-peminjaman",
     detailPeminjamanRouter
 );
 
-
 app.use(
     "/api/pengembalian",
     pengembalianRouter
 );
-
 
 app.use(
     "/api/pembayaran",
     pembayaranRouter
 );
 
-
 app.use(
     "/api/notifications",
     notificationRouter
 );
-
 
 app.use(
     "/api/pengaturan-pembayaran",
@@ -503,6 +462,16 @@ app.use(
 
 
 // ==================================================
+// ROUTER DOKUMEN JAMINAN
+// ==================================================
+
+app.use(
+    "/api/dokumen-jaminan",
+    dokumenJaminanRouter
+);
+
+
+// ==================================================
 // CHAT ROUTER
 // ==================================================
 
@@ -522,7 +491,6 @@ app.get(
 
         res.status(200).json(
             {
-
                 success: true,
 
                 message:
@@ -575,6 +543,9 @@ app.get(
                     pengembalianDana:
                         "/api/pengembalian-dana",
 
+                    dokumenJaminan:
+                        "/api/dokumen-jaminan",
+
                     notifications:
                         "/api/notifications",
 
@@ -583,7 +554,6 @@ app.get(
 
                     chat:
                         "/api/chat"
-
                 },
 
                 socket:
@@ -591,10 +561,8 @@ app.get(
 
                 timestamp:
                     new Date().toISOString()
-
             }
         );
-
     }
 );
 
@@ -608,7 +576,6 @@ const buildPath =
         __dirname,
         "dist"
     );
-
 
 app.use(
     express.static(
@@ -633,9 +600,7 @@ app.use(
                 "/api/"
             )
         ) {
-
             return next();
-
         }
 
 
@@ -648,9 +613,7 @@ app.use(
                 "/socket.io/"
             )
         ) {
-
             return next();
-
         }
 
 
@@ -660,20 +623,15 @@ app.use(
                 "index.html"
             );
 
-
         res.sendFile(
             indexPath,
             (err) => {
 
                 if (err) {
-
                     next(err);
-
                 }
-
             }
         );
-
     }
 );
 
@@ -687,7 +645,6 @@ app.use(
 
         res.status(404).json(
             {
-
                 success: false,
 
                 message:
@@ -695,10 +652,8 @@ app.use(
 
                 path:
                     req.originalUrl
-
             }
         );
-
     }
 );
 
@@ -743,15 +698,13 @@ app.use(
 
 
         // ==========================================
-        // JIKA RESPONSE SUDAH TERKIRIM
+        // RESPONSE SUDAH TERKIRIM
         // ==========================================
 
         if (
             res.headersSent
         ) {
-
             return next(err);
-
         }
 
 
@@ -773,15 +726,12 @@ app.use(
                     .status(400)
                     .json(
                         {
-
                             success: false,
 
                             message:
-                                "Ukuran bukti pembayaran maksimal 5 MB."
-
+                                "Ukuran file maksimal 5 MB."
                         }
                     );
-
             }
 
 
@@ -789,15 +739,12 @@ app.use(
                 .status(400)
                 .json(
                     {
-
                         success: false,
 
                         message:
                             `Upload file gagal: ${err.message}`
-
                     }
                 );
-
         }
 
 
@@ -807,8 +754,13 @@ app.use(
 
         if (
             err.message &&
-            err.message.includes(
-                "Format bukti pembayaran"
+            (
+                err.message.includes(
+                    "Format bukti pembayaran"
+                ) ||
+                err.message.includes(
+                    "Format dokumen jaminan"
+                )
             )
         ) {
 
@@ -816,15 +768,12 @@ app.use(
                 .status(400)
                 .json(
                     {
-
                         success: false,
 
                         message:
                             err.message
-
                     }
                 );
-
         }
 
 
@@ -837,12 +786,10 @@ app.use(
             err.statusCode ||
             500;
 
-
         return res
             .status(statusCode)
             .json(
                 {
-
                     success: false,
 
                     message:
@@ -854,10 +801,8 @@ app.use(
                         "development"
                             ? err.stack
                             : undefined
-
                 }
             );
-
     }
 );
 
@@ -885,7 +830,6 @@ server.on(
         console.error(
             "================================="
         );
-
     }
 );
 
@@ -928,7 +872,6 @@ server.listen(
         console.log(
             "================================="
         );
-
 
         console.log(
             "Available endpoints:"
@@ -995,6 +938,10 @@ server.listen(
         );
 
         console.log(
+            "/api/dokumen-jaminan"
+        );
+
+        console.log(
             "/api/notifications"
         );
 
@@ -1009,6 +956,5 @@ server.listen(
         console.log(
             "================================="
         );
-
     }
 );

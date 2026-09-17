@@ -1,15 +1,13 @@
-// routers/pembayaranRouter.js
-
 const express = require("express");
 
-const router = express.Router();
+const router =
+    express.Router();
 
 const pembayaranController =
     require("../controllers/pembayaranController");
 
 const uploadPembayaran =
     require("../middleware/uploadPembayaran");
-
 
 // ======================================================
 // GET SEMUA PEMBAYARAN
@@ -20,7 +18,6 @@ router.get(
     pembayaranController.getPembayaran
 );
 
-
 // ======================================================
 // GET PEMBAYARAN BERDASARKAN PEMINJAMAN
 // ======================================================
@@ -29,7 +26,6 @@ router.get(
     "/peminjaman/:idPeminjaman",
     pembayaranController.getPembayaranByPeminjaman
 );
-
 
 // ======================================================
 // GET PEMBAYARAN BERDASARKAN ID
@@ -40,28 +36,35 @@ router.get(
     pembayaranController.getPembayaranById
 );
 
-
 // ======================================================
-// POST PEMBAYARAN + UPLOAD BUKTI
+// CREATE PEMBAYARAN
+//
+// PENTING:
+// uploadPembayaran.single("bukti_bayar")
+// membuat file tersedia sebagai:
+//
+// req.file
 // ======================================================
 
 router.post(
     "/",
-    uploadPembayaran.single("bukti_bayar"),
+    uploadPembayaran.single(
+        "bukti_bayar"
+    ),
     pembayaranController.createPembayaran
 );
 
-
 // ======================================================
-// UPDATE PEMBAYARAN + UPLOAD BUKTI
+// UPDATE PEMBAYARAN
 // ======================================================
 
 router.put(
     "/:id",
-    uploadPembayaran.single("bukti_bayar"),
+    uploadPembayaran.single(
+        "bukti_bayar"
+    ),
     pembayaranController.updatePembayaran
 );
-
 
 // ======================================================
 // UPDATE STATUS PEMBAYARAN
@@ -72,7 +75,6 @@ router.put(
     pembayaranController.updateStatusPembayaran
 );
 
-
 // ======================================================
 // DELETE PEMBAYARAN
 // ======================================================
@@ -82,5 +84,9 @@ router.delete(
     pembayaranController.deletePembayaran
 );
 
+// ======================================================
+// EXPORT
+// ======================================================
 
-module.exports = router;
+module.exports =
+    router;

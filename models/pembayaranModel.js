@@ -24,28 +24,31 @@ const ALLOWED_METODE = [
 // ======================================================
 
 const isValidId = (value) => {
-
     return (
         value !== undefined &&
         value !== null &&
         value !== "" &&
-        !isNaN(value) &&
+        Number.isInteger(Number(value)) &&
         Number(value) > 0
     );
-
 };
 
 
 const isValidPositiveNumber = (value) => {
-
     return (
         value !== undefined &&
         value !== null &&
         value !== "" &&
-        !isNaN(value) &&
+        Number.isFinite(Number(value)) &&
         Number(value) > 0
     );
+};
 
+
+const roundMoney = (value) => {
+    return Math.round(
+        (Number(value) + Number.EPSILON) * 100
+    ) / 100;
 };
 
 
@@ -191,7 +194,9 @@ const getPembayaranById = (
 
     db.query(
         sql,
-        [Number(id)],
+        [
+            Number(id)
+        ],
         callback
     );
 
@@ -267,7 +272,9 @@ const getPembayaranByPeminjaman = (
 
     db.query(
         sql,
-        [Number(idPeminjaman)],
+        [
+            Number(idPeminjaman)
+        ],
         callback
     );
 
@@ -281,8 +288,7 @@ const getPembayaranByPeminjaman = (
 // Sistem menggunakan satu pembayaran untuk satu
 // peminjaman.
 //
-// Jadi fungsi ini digunakan sebelum CREATE.
-//
+// Fungsi ini dipanggil sebelum CREATE.
 // ======================================================
 
 const checkExistingPembayaran = (
@@ -334,7 +340,9 @@ const checkExistingPembayaran = (
 
     db.query(
         sql,
-        [Number(idPeminjaman)],
+        [
+            Number(idPeminjaman)
+        ],
         callback
     );
 
@@ -343,6 +351,16 @@ const checkExistingPembayaran = (
 
 // ======================================================
 // CREATE PEMBAYARAN
+// ======================================================
+//
+// Model menerima data dari controller.
+//
+// Controller sudah memastikan:
+// - nominal = DP 50% atau 100%
+// - status = Belum Bayar
+//
+// Model tetap melakukan validasi dasar sebagai
+// lapisan keamanan tambahan.
 // ======================================================
 
 const createPembayaran = (
@@ -412,27 +430,16 @@ const createPembayaran = (
 
 
     // ==================================================
-    // VALIDASI STATUS
+    // STATUS CREATE SELALU BELUM BAYAR
+    // ==================================================
+    //
+    // Jangan menerima status dari frontend.
+    // Customer tidak boleh membuat pembayaran langsung
+    // sebagai Lunas.
     // ==================================================
 
     const status =
-        data.status ||
         "Belum Bayar";
-
-
-    if (
-        !ALLOWED_STATUS.includes(
-            status
-        )
-    ) {
-
-        return callback(
-            new Error(
-                "Status pembayaran tidak valid."
-            )
-        );
-
-    }
 
 
     // ==================================================
@@ -451,7 +458,7 @@ const createPembayaran = (
 
 
     const total =
-        Number(
+        roundMoney(
             data.total
         );
 
@@ -519,6 +526,14 @@ const createPembayaran = (
 
 // ======================================================
 // UPDATE PEMBAYARAN
+// ======================================================
+//
+// Update hanya digunakan untuk pembayaran yang masih
+// Belum Bayar.
+//
+// Controller sudah memvalidasi nominal dan metode.
+//
+// Status selalu kembali/bertahan sebagai Belum Bayar.
 // ======================================================
 
 const updatePembayaran = (
@@ -602,27 +617,11 @@ const updatePembayaran = (
 
 
     // ==================================================
-    // VALIDASI STATUS
+    // STATUS SELALU BELUM BAYAR
     // ==================================================
 
     const status =
-        data.status ||
         "Belum Bayar";
-
-
-    if (
-        !ALLOWED_STATUS.includes(
-            status
-        )
-    ) {
-
-        return callback(
-            new Error(
-                "Status pembayaran tidak valid."
-            )
-        );
-
-    }
 
 
     // ==================================================
@@ -641,7 +640,7 @@ const updatePembayaran = (
 
 
     const total =
-        Number(
+        roundMoney(
             data.total
         );
 
@@ -720,6 +719,23 @@ const updatePembayaran = (
 // ======================================================
 // UPDATE STATUS PEMBAYARAN
 // ======================================================
+//
+// ALUR STATUS:
+//
+// Belum Bayar
+//      ↓
+//    Lunas
+//
+// Tidak diperbolehkan:
+//
+// Lunas
+//   ↓
+// Belum Bayar
+//
+// Controller melakukan validasi sebelum memanggil
+// fungsi ini. Model juga membatasi transisi secara
+// langsung menggunakan kondisi WHERE.
+// ======================================================
 
 const updateStatusPembayaran = (
     id,
@@ -741,7 +757,7 @@ const updateStatusPembayaran = (
 
 
     // ==================================================
-    // VALIDASI STATUS
+    // STATUS YANG DIIZINKAN
     // ==================================================
 
     if (
@@ -760,7 +776,36 @@ const updateStatusPembayaran = (
 
 
     // ==================================================
-    // UPDATE
+    // HANYA BOLEH:
+    //
+    // Belum Bayar -> Lunas
+    //
+    // ==================================================
+
+    if (
+        status !==
+        "Lunas"
+    ) {
+
+        return callback(
+            new Error(
+                "Status pembayaran hanya dapat diubah menjadi Lunas."
+            )
+        );
+
+    }
+
+
+    // ==================================================
+    // UPDATE DENGAN KONDISI STATUS
+    // ==================================================
+    //
+    // Kondisi:
+    // status lama harus Belum Bayar.
+    //
+    // Dengan demikian:
+    // Lunas -> Belum Bayar tidak mungkin dilakukan
+    // melalui model ini.
     // ==================================================
 
     const sql = `
@@ -773,6 +818,8 @@ const updateStatusPembayaran = (
         WHERE
             id_pembayaran = ?
 
+            AND status = 'Belum Bayar'
+
     `;
 
 
@@ -780,7 +827,7 @@ const updateStatusPembayaran = (
         sql,
         [
 
-            status,
+            "Lunas",
 
             Number(id)
 
@@ -793,6 +840,12 @@ const updateStatusPembayaran = (
 
 // ======================================================
 // DELETE PEMBAYARAN
+// ======================================================
+//
+// Pembayaran Lunas tidak boleh dihapus.
+//
+// Pembayaran Belum Bayar masih dapat dihapus melalui
+// endpoint delete apabila diperlukan.
 // ======================================================
 
 const deletePembayaran = (
@@ -813,6 +866,10 @@ const deletePembayaran = (
     }
 
 
+    // ==================================================
+    // DELETE HANYA JIKA STATUS BELUM BAYAR
+    // ==================================================
+
     const sql = `
 
         DELETE FROM pembayaran
@@ -820,12 +877,16 @@ const deletePembayaran = (
         WHERE
             id_pembayaran = ?
 
+            AND status = 'Belum Bayar'
+
     `;
 
 
     db.query(
         sql,
-        [Number(id)],
+        [
+            Number(id)
+        ],
         callback
     );
 
