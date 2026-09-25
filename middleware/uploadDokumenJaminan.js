@@ -1,52 +1,216 @@
-const multer = require('multer');
-const path = require('path');
-const fs = require('fs');
+const multer = require("multer");
+const path = require("path");
+const supabase = require("../config/supabase");
 
-const uploadDir = path.join(__dirname, '..', 'uploads', 'dokumen-jaminan');
+const storage = multer.memoryStorage();
 
-if (!fs.existsSync(uploadDir)) {
-    fs.mkdirSync(uploadDir, { recursive: true });
-}
 
-const storage = multer.diskStorage({
-    destination: function (req, file, cb) {
-        cb(null, uploadDir);
-    },
+// ======================================================
+// GENERATE NAMA FILE
+// ======================================================
 
-    filename: function (req, file, cb) {
-        const ext = path.extname(file.originalname).toLowerCase();
-        const name = path
-            .basename(file.originalname, ext)
-            .replace(/[^a-zA-Z0-9]/g, '-')
-            .toLowerCase();
+const generateFileName = (originalName) => {
+    const safeOriginalName = path.basename(originalName);
 
-        cb(null, `${Date.now()}-${name}${ext}`);
-    }
-});
+    const extension = path
+        .extname(safeOriginalName)
+        .toLowerCase();
 
-const fileFilter = function (req, file, cb) {
-    const allowedExtensions = [
-        '.jpg',
-        '.jpeg',
-        '.png',
-        '.pdf'
-    ];
+    const baseName = path.basename(
+        safeOriginalName,
+        path.extname(safeOriginalName)
+    );
 
-    const ext = path.extname(file.originalname).toLowerCase();
+    const cleanName = baseName
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+/g, "")
+        .replace(/-+$/g, "");
 
-    if (allowedExtensions.includes(ext)) {
-        cb(null, true);
-    } else {
-        cb(new Error('Format file tidak diperbolehkan. Gunakan JPG, JPEG, PNG, atau PDF.'));
+    return `jaminan-${cleanName || "dokumen"}-${Date.now()}${extension}`;
+};
+
+
+// ======================================================
+// UPLOAD KE SUPABASE
+// ======================================================
+
+const uploadDokumenJaminanToSupabase = async (
+    req,
+    res,
+    next
+) => {
+    try {
+        if (!req.file) {
+            return next();
+        }
+
+        const fileName = generateFileName(
+            req.file.originalname
+        );
+
+        console.log("======================================");
+        console.log("UPLOAD DOKUMEN JAMINAN");
+        console.log("Original:", req.file.originalname);
+        console.log("Final:", fileName);
+        console.log("Bucket:", "dokumen-jaminan");
+        console.log("======================================");
+
+        const { error } = await supabase.storage
+            .from("dokumen-jaminan")
+            .upload(
+                fileName,
+                req.file.buffer,
+                {
+                    contentType: req.file.mimetype,
+                    upsert: true
+                }
+            );
+
+        if (error) {
+            console.error(
+                "SUPABASE UPLOAD DOKUMEN JAMINAN ERROR:",
+                error
+            );
+
+            return res.status(500).json({
+                success: false,
+                message:
+                    "Gagal mengupload dokumen jaminan ke Supabase",
+                error: error.message
+            });
+        }
+
+        const { data: publicUrlData } =
+            supabase.storage
+                .from("dokumen-jaminan")
+                .getPublicUrl(fileName);
+
+        const publicUrl =
+            publicUrlData.publicUrl;
+
+        req.file.filename = fileName;
+
+        req.file.path = publicUrl;
+
+        req.file.publicUrl = publicUrl;
+
+        console.log(
+            "Public URL:",
+            publicUrl
+        );
+
+        next();
+
+    } catch (error) {
+
+        console.error(
+            "UPLOAD DOKUMEN JAMINAN ERROR:",
+            error
+        );
+
+        return res.status(500).json({
+            success: false,
+            message:
+                "Gagal memproses upload dokumen jaminan",
+            error: error.message
+        });
     }
 };
 
-const uploadDokumenJaminan = multer({
-    storage: storage,
-    fileFilter: fileFilter,
+
+// ======================================================
+// FILE FILTER
+// ======================================================
+
+const fileFilter = (
+    req,
+    file,
+    cb
+) => {
+
+    const allowedMimeTypes = [
+        "image/jpeg",
+        "image/jpg",
+        "image/png",
+        "image/webp",
+        "application/pdf"
+    ];
+
+    if (
+        allowedMimeTypes.includes(
+            file.mimetype
+        )
+    ) {
+        cb(null, true);
+    } else {
+        cb(
+            new Error(
+                "Format file tidak diperbolehkan. Gunakan JPG, JPEG, PNG, WEBP, atau PDF."
+            ),
+            false
+        );
+    }
+};
+
+
+// ======================================================
+// MULTER
+// ======================================================
+
+const upload = multer({
+    storage,
+    fileFilter,
     limits: {
         fileSize: 5 * 1024 * 1024
     }
 });
 
-module.exports = uploadDokumenJaminan;
+
+// ======================================================
+// MIDDLEWARE UTAMA
+// ======================================================
+
+const uploadDokumenJaminan = {
+
+    single: (fieldName) => {
+
+        return (
+            req,
+            res,
+            next
+        ) => {
+
+            upload.single(fieldName)(
+                req,
+                res,
+                (err) => {
+
+                    if (err) {
+
+                        console.error(
+                            "MULTER DOKUMEN JAMINAN ERROR:",
+                            err
+                        );
+
+                        return res.status(400).json({
+                            success: false,
+                            message: err.message
+                        });
+                    }
+
+                    uploadDokumenJaminanToSupabase(
+                        req,
+                        res,
+                        next
+                    );
+                }
+            );
+        };
+    }
+};
+
+
+module.exports =
+    uploadDokumenJaminan;

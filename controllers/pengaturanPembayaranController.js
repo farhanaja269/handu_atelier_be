@@ -264,15 +264,14 @@ const createPengaturanPembayaran = (
 
     let qris = null;
 
-
     if (
         metode === "QRIS" &&
         req.file
     ) {
-
+    
         qris =
-            `/uploads/pembayaran/${req.file.filename}`;
-
+            req.file.publicUrl;
+    
     }
 
 
@@ -432,17 +431,14 @@ const updatePengaturanPembayaran = (
 
     let qris = null;
 
-
     if (
         req.file
     ) {
-
+    
         qris =
-            `/uploads/pembayaran/${req.file.filename}`;
-
+            req.file.publicUrl;
+    
     }
-
-
     // ==================================================
     // DATA
     // ==================================================
@@ -584,8 +580,7 @@ const updateQris = (
     // ==================================================
 
     const qris =
-        `/uploads/pembayaran/${req.file.filename}`;
-
+    req.file.publicUrl;
 
     // ==================================================
     // UPDATE DATABASE

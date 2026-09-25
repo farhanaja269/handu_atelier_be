@@ -2,6 +2,9 @@
 // controllers/pembayaranController.js
 // ======================================================
 
+const supabase =
+    require("../config/supabase");
+
 const pembayaranModel =
     require("../models/pembayaranModel");
 
@@ -13,6 +16,64 @@ const notificationModel =
 
 
 // ======================================================
+// HELPER SUPABASE
+// ======================================================
+
+const deleteSupabaseFile = async (
+    fileValue
+) => {
+    if (!fileValue) {
+        return;
+    }
+
+    try {
+        let fileName = fileValue;
+
+        // Jika yang tersimpan adalah URL Supabase,
+        // ambil nama file setelah /bukti-pembayaran/
+        if (
+            typeof fileValue === "string" &&
+            fileValue.includes(
+                "/storage/v1/object/public/bukti-pembayaran/"
+            )
+        ) {
+            fileName =
+                fileValue.split(
+                    "/storage/v1/object/public/bukti-pembayaran/"
+                )[1];
+        }
+
+        if (!fileName) {
+            return;
+        }
+
+        const {
+            error
+        } =
+            await supabase.storage
+                .from("bukti-pembayaran")
+                .remove([
+                    fileName
+                ]);
+
+        if (error) {
+            console.error(
+                "Gagal menghapus file bukti pembayaran dari Supabase:",
+                error
+            );
+        }
+
+    } catch (error) {
+
+        console.error(
+            "Error delete file Supabase:",
+            error
+        );
+    }
+};
+
+
+// ======================================================
 // HELPER
 // ======================================================
 
@@ -21,18 +82,24 @@ const isValidId = (value) => {
         value !== undefined &&
         value !== null &&
         value !== "" &&
-        Number.isInteger(Number(value)) &&
+        Number.isInteger(
+            Number(value)
+        ) &&
         Number(value) > 0
     );
 };
 
 
-const isValidPositiveNumber = (value) => {
+const isValidPositiveNumber = (
+    value
+) => {
     return (
         value !== undefined &&
         value !== null &&
         value !== "" &&
-        Number.isFinite(Number(value)) &&
+        Number.isFinite(
+            Number(value)
+        ) &&
         Number(value) > 0
     );
 };
@@ -41,7 +108,9 @@ const isValidPositiveNumber = (value) => {
 const roundMoney = (value) => {
     return (
         Math.round(
-            (Number(value) + Number.EPSILON) * 100
+            (Number(value) +
+                Number.EPSILON) *
+                100
         ) / 100
     );
 };
@@ -82,13 +151,21 @@ const validateNominalPembayaran = (
 ) => {
 
     const total =
-        roundMoney(totalPeminjaman);
+        roundMoney(
+            totalPeminjaman
+        );
 
     const bayar =
-        roundMoney(jumlahBayar);
+        roundMoney(
+            jumlahBayar
+        );
 
 
-    if (!isValidPositiveNumber(bayar)) {
+    if (
+        !isValidPositiveNumber(
+            bayar
+        )
+    ) {
 
         return {
             valid: false,
@@ -98,7 +175,11 @@ const validateNominalPembayaran = (
     }
 
 
-    if (!isValidPositiveNumber(total)) {
+    if (
+        !isValidPositiveNumber(
+            total
+        )
+    ) {
 
         return {
             valid: false,
@@ -109,7 +190,9 @@ const validateNominalPembayaran = (
 
 
     const pembayaranDP =
-        roundMoney(total * 0.5);
+        roundMoney(
+            total * 0.5
+        );
 
     const pembayaranLunas =
         total;
@@ -122,7 +205,10 @@ const validateNominalPembayaran = (
         bayar === pembayaranLunas;
 
 
-    if (!isDP && !isLunas) {
+    if (
+        !isDP &&
+        !isLunas
+    ) {
 
         return {
             valid: false,
@@ -202,7 +288,9 @@ const getPembayaranById = (
         req.params.id;
 
 
-    if (!isValidId(id)) {
+    if (
+        !isValidId(id)
+    ) {
 
         return res.status(400).json({
             success: false,
@@ -272,7 +360,11 @@ const getPembayaranByPeminjaman = (
         req.params.idPeminjaman;
 
 
-    if (!isValidId(idPeminjaman)) {
+    if (
+        !isValidId(
+            idPeminjaman
+        )
+    ) {
 
         return res.status(400).json({
             success: false,
@@ -330,14 +422,26 @@ const createPembayaran = (
 
 
     const idPeminjaman =
-        Number(data.id_peminjaman);
+        Number(
+            data.id_peminjaman
+        );
 
 
     // ==================================================
     // VALIDASI ID PEMINJAMAN
     // ==================================================
 
-    if (!isValidId(idPeminjaman)) {
+    if (
+        !isValidId(
+            idPeminjaman
+        )
+    ) {
+
+        if (req.file) {
+            deleteSupabaseFile(
+                req.file.filename
+            );
+        }
 
         return res.status(400).json({
             success: false,
@@ -364,11 +468,18 @@ const createPembayaran = (
         "FILE PEMBAYARAN:",
         req.file
             ? {
-                fieldname: req.file.fieldname,
-                originalname: req.file.originalname,
-                filename: req.file.filename,
-                mimetype: req.file.mimetype,
-                size: req.file.size
+                fieldname:
+                    req.file.fieldname,
+                originalname:
+                    req.file.originalname,
+                filename:
+                    req.file.filename,
+                publicUrl:
+                    req.file.publicUrl,
+                mimetype:
+                    req.file.mimetype,
+                size:
+                    req.file.size
             }
             : null
     );
@@ -384,7 +495,7 @@ const createPembayaran = (
 
     peminjamanModel.getPeminjamanById(
         idPeminjaman,
-        (
+        async (
             loanErr,
             loanResult
         ) => {
@@ -395,6 +506,12 @@ const createPembayaran = (
                     "Error cek peminjaman:",
                     loanErr
                 );
+
+                if (req.file) {
+                    await deleteSupabaseFile(
+                        req.file.filename
+                    );
+                }
 
                 return res.status(500).json({
                     success: false,
@@ -410,6 +527,12 @@ const createPembayaran = (
                 !loanResult ||
                 loanResult.length === 0
             ) {
+
+                if (req.file) {
+                    await deleteSupabaseFile(
+                        req.file.filename
+                    );
+                }
 
                 return res.status(404).json({
                     success: false,
@@ -433,6 +556,12 @@ const createPembayaran = (
                 )
             ) {
 
+                if (req.file) {
+                    await deleteSupabaseFile(
+                        req.file.filename
+                    );
+                }
+
                 return res.status(400).json({
                     success: false,
                     message:
@@ -447,7 +576,7 @@ const createPembayaran = (
 
             pembayaranModel.checkExistingPembayaran(
                 idPeminjaman,
-                (
+                async (
                     checkErr,
                     existing
                 ) => {
@@ -458,6 +587,12 @@ const createPembayaran = (
                             "Error cek pembayaran:",
                             checkErr
                         );
+
+                        if (req.file) {
+                            await deleteSupabaseFile(
+                                req.file.filename
+                            );
+                        }
 
                         return res.status(500).json({
                             success: false,
@@ -473,6 +608,12 @@ const createPembayaran = (
                         existing &&
                         existing.length > 0
                     ) {
+
+                        if (req.file) {
+                            await deleteSupabaseFile(
+                                req.file.filename
+                            );
+                        }
 
                         return res.status(409).json({
                             success: false,
@@ -495,6 +636,12 @@ const createPembayaran = (
                             metode
                         )
                     ) {
+
+                        if (req.file) {
+                            await deleteSupabaseFile(
+                                req.file.filename
+                            );
+                        }
 
                         return res.status(400).json({
                             success: false,
@@ -519,6 +666,12 @@ const createPembayaran = (
                             totalPeminjaman
                         )
                     ) {
+
+                        if (req.file) {
+                            await deleteSupabaseFile(
+                                req.file.filename
+                            );
+                        }
 
                         return res.status(400).json({
                             success: false,
@@ -549,6 +702,12 @@ const createPembayaran = (
                         !validasiNominal.valid
                     ) {
 
+                        if (req.file) {
+                            await deleteSupabaseFile(
+                                req.file.filename
+                            );
+                        }
+
                         return res.status(400).json({
                             success: false,
                             message:
@@ -560,18 +719,10 @@ const createPembayaran = (
                     // ==================================================
                     // BUKTI PEMBAYARAN
                     // ==================================================
-                    //
-                    // PENTING:
-                    // File dari multer berada di req.file.
-                    //
-                    // BUKAN:
-                    // req.body.bukti_bayar
-                    //
-                    // ==================================================
 
                     const buktiBayar =
                         req.file
-                            ? req.file.filename
+                            ? req.file.publicUrl
                             : null;
 
 
@@ -593,11 +744,6 @@ const createPembayaran = (
 
                     // ==================================================
                     // STATUS SELALU BELUM BAYAR
-                    // ==================================================
-                    //
-                    // Customer tidak dapat menentukan status.
-                    // Petugas yang melakukan verifikasi.
-                    //
                     // ==================================================
 
                     const statusPembayaran =
@@ -643,7 +789,7 @@ const createPembayaran = (
 
                     pembayaranModel.createPembayaran(
                         paymentData,
-                        (
+                        async (
                             err,
                             result
                         ) => {
@@ -654,6 +800,12 @@ const createPembayaran = (
                                     "Error create pembayaran:",
                                     err
                                 );
+
+                                if (req.file) {
+                                    await deleteSupabaseFile(
+                                        req.file.filename
+                                    );
+                                }
 
                                 return res.status(500).json({
                                     success: false,
@@ -774,14 +926,6 @@ const createPembayaran = (
 // ======================================================
 // UPDATE PEMBAYARAN
 // ======================================================
-//
-// Pembayaran yang sudah Lunas tidak dapat diedit.
-//
-// Pembayaran Belum Bayar dapat diperbaiki.
-//
-// Status tidak pernah diambil dari request.
-//
-// ======================================================
 
 const updatePembayaran = (
     req,
@@ -792,7 +936,15 @@ const updatePembayaran = (
         req.params.id;
 
 
-    if (!isValidId(id)) {
+    if (
+        !isValidId(id)
+    ) {
+
+        if (req.file) {
+            deleteSupabaseFile(
+                req.file.filename
+            );
+        }
 
         return res.status(400).json({
             success: false,
@@ -810,6 +962,12 @@ const updatePembayaran = (
         ) => {
 
             if (getErr) {
+
+                if (req.file) {
+                    deleteSupabaseFile(
+                        req.file.filename
+                    );
+                }
 
                 console.error(
                     "Error get pembayaran untuk update:",
@@ -831,6 +989,12 @@ const updatePembayaran = (
                 result.length === 0
             ) {
 
+                if (req.file) {
+                    deleteSupabaseFile(
+                        req.file.filename
+                    );
+                }
+
                 return res.status(404).json({
                     success: false,
                     message:
@@ -851,6 +1015,12 @@ const updatePembayaran = (
                 payment.status ===
                 "Lunas"
             ) {
+
+                if (req.file) {
+                    deleteSupabaseFile(
+                        req.file.filename
+                    );
+                }
 
                 return res.status(400).json({
                     success: false,
@@ -877,6 +1047,12 @@ const updatePembayaran = (
 
                     if (loanErr) {
 
+                        if (req.file) {
+                            deleteSupabaseFile(
+                                req.file.filename
+                            );
+                        }
+
                         console.error(
                             "Error mengambil peminjaman saat update pembayaran:",
                             loanErr
@@ -896,6 +1072,12 @@ const updatePembayaran = (
                         !loanResult ||
                         loanResult.length === 0
                     ) {
+
+                        if (req.file) {
+                            deleteSupabaseFile(
+                                req.file.filename
+                            );
+                        }
 
                         return res.status(404).json({
                             success: false,
@@ -919,6 +1101,12 @@ const updatePembayaran = (
                         )
                     ) {
 
+                        if (req.file) {
+                            deleteSupabaseFile(
+                                req.file.filename
+                            );
+                        }
+
                         return res.status(400).json({
                             success: false,
                             message:
@@ -941,6 +1129,12 @@ const updatePembayaran = (
                             metode
                         )
                     ) {
+
+                        if (req.file) {
+                            deleteSupabaseFile(
+                                req.file.filename
+                            );
+                        }
 
                         return res.status(400).json({
                             success: false,
@@ -966,8 +1160,12 @@ const updatePembayaran = (
 
                     const jumlahBayar =
                         data.total !== undefined
-                            ? roundMoney(data.total)
-                            : roundMoney(payment.total);
+                            ? roundMoney(
+                                data.total
+                            )
+                            : roundMoney(
+                                payment.total
+                            );
 
 
                     const validasiNominal =
@@ -981,6 +1179,12 @@ const updatePembayaran = (
                         !validasiNominal.valid
                     ) {
 
+                        if (req.file) {
+                            deleteSupabaseFile(
+                                req.file.filename
+                            );
+                        }
+
                         return res.status(400).json({
                             success: false,
                             message:
@@ -992,18 +1196,10 @@ const updatePembayaran = (
                     // ==================================================
                     // BUKTI PEMBAYARAN
                     // ==================================================
-                    //
-                    // Jika upload file baru:
-                    //     gunakan req.file.filename
-                    //
-                    // Jika tidak upload file baru:
-                    //     gunakan bukti lama
-                    //
-                    // ==================================================
 
                     const buktiBayar =
                         req.file
-                            ? req.file.filename
+                            ? req.file.publicUrl
                             : payment.bukti_bayar ||
                               null;
 
@@ -1015,6 +1211,12 @@ const updatePembayaran = (
                         ) &&
                         !buktiBayar
                     ) {
+
+                        if (req.file) {
+                            deleteSupabaseFile(
+                                req.file.filename
+                            );
+                        }
 
                         return res.status(400).json({
                             success: false,
@@ -1057,10 +1259,14 @@ const updatePembayaran = (
                     );
 
 
+                    // ==================================================
+                    // SIMPAN UPDATE
+                    // ==================================================
+
                     pembayaranModel.updatePembayaran(
                         id,
                         updateData,
-                        (
+                        async (
                             err,
                             updateResult
                         ) => {
@@ -1071,6 +1277,12 @@ const updatePembayaran = (
                                     "Error update pembayaran:",
                                     err
                                 );
+
+                                if (req.file) {
+                                    await deleteSupabaseFile(
+                                        req.file.filename
+                                    );
+                                }
 
                                 return res.status(500).json({
                                     success: false,
@@ -1083,15 +1295,35 @@ const updatePembayaran = (
 
 
                             if (
+                                !updateResult ||
                                 updateResult.affectedRows ===
                                 0
                             ) {
+
+                                if (req.file) {
+                                    await deleteSupabaseFile(
+                                        req.file.filename
+                                    );
+                                }
 
                                 return res.status(404).json({
                                     success: false,
                                     message:
                                         "Pembayaran tidak ditemukan"
                                 });
+                            }
+
+
+                            // Jika ada file baru,
+                            // hapus file lama dari Supabase.
+                            if (
+                                req.file &&
+                                payment.bukti_bayar
+                            ) {
+
+                                await deleteSupabaseFile(
+                                    payment.bukti_bayar
+                                );
                             }
 
 
@@ -1149,16 +1381,6 @@ const updatePembayaran = (
 // UPDATE STATUS PEMBAYARAN
 // HANYA DIGUNAKAN PETUGAS / ADMIN
 // ======================================================
-//
-// ALUR:
-//
-// Belum Bayar -> Lunas
-//
-// Tidak ada:
-//
-// Lunas -> Belum Bayar
-//
-// ======================================================
 
 const updateStatusPembayaran = (
     req,
@@ -1175,7 +1397,9 @@ const updateStatusPembayaran = (
         req.body || {};
 
 
-    if (!isValidId(id)) {
+    if (
+        !isValidId(id)
+    ) {
 
         return res.status(400).json({
             success: false,
@@ -1517,10 +1741,6 @@ const updateStatusPembayaran = (
 // ======================================================
 // DELETE PEMBAYARAN
 // ======================================================
-//
-// Pembayaran Lunas tidak boleh dihapus.
-//
-// ======================================================
 
 const deletePembayaran = (
     req,
@@ -1531,7 +1751,9 @@ const deletePembayaran = (
         req.params.id;
 
 
-    if (!isValidId(id)) {
+    if (
+        !isValidId(id)
+    ) {
 
         return res.status(400).json({
             success: false,
@@ -1604,12 +1826,12 @@ const deletePembayaran = (
 
 
             // ==================================================
-            // DELETE
+            // DELETE DATABASE
             // ==================================================
 
             pembayaranModel.deletePembayaran(
                 id,
-                (
+                async (
                     err,
                     deleteResult
                 ) => {
@@ -1645,6 +1867,20 @@ const deletePembayaran = (
                     }
 
 
+                    // ==================================================
+                    // HAPUS FILE SUPABASE
+                    // ==================================================
+
+                    if (
+                        payment.bukti_bayar
+                    ) {
+
+                        await deleteSupabaseFile(
+                            payment.bukti_bayar
+                        );
+                    }
+
+
                     return res.status(200).json({
                         success: true,
                         message:
@@ -1676,5 +1912,4 @@ module.exports = {
     updateStatusPembayaran,
 
     deletePembayaran
-
 };

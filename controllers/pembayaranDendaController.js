@@ -11,6 +11,90 @@ const dendaModel =
 const notificationModel =
     require("../models/notificationModel");
 
+const supabase =
+    require("../config/supabase");
+
+// ======================================================
+// SUPABASE STORAGE
+// ======================================================
+
+const SUPABASE_BUCKET =
+    "pembayaran-denda";
+
+// ======================================================
+// HELPER DELETE FILE SUPABASE
+// ======================================================
+
+const deleteSupabaseFile = async (
+    fileValue
+) => {
+
+    try {
+
+        if (
+            !fileValue ||
+            typeof fileValue !== "string"
+        ) {
+            return;
+        }
+
+        const prefix =
+            `${process.env.SUPABASE_URL}/storage/v1/object/public/${SUPABASE_BUCKET}/`;
+
+        let fileName = null;
+
+        /*
+            Hanya hapus file yang benar-benar
+            berasal dari Supabase bucket pembayaran-denda.
+
+            File lama seperti:
+            /uploads/pembayaran-denda/nama-file.jpg
+
+            tidak akan disentuh.
+        */
+
+        if (
+            fileValue.startsWith(prefix)
+        ) {
+
+            fileName =
+                decodeURIComponent(
+                    fileValue.slice(
+                        prefix.length
+                    )
+                );
+        }
+
+        if (!fileName) {
+            return;
+        }
+
+        const {
+            error
+        } = await supabase
+            .storage
+            .from(SUPABASE_BUCKET)
+            .remove([
+                fileName
+            ]);
+
+        if (error) {
+
+            console.error(
+                "ERROR DELETE FILE SUPABASE PEMBAYARAN DENDA:",
+                error
+            );
+        }
+
+    } catch (error) {
+
+        console.error(
+            "ERROR DELETE FILE SUPABASE PEMBAYARAN DENDA:",
+            error
+        );
+    }
+};
+
 // ======================================================
 // GET SEMUA PEMBAYARAN DENDA
 // ======================================================
@@ -264,8 +348,14 @@ const createPembayaranDenda = (
 
     if (req.file) {
 
+        /*
+            Middleware uploadPembayaranDenda
+            sudah mengupload file ke Supabase
+            dan memberikan publicUrl.
+        */
+
         buktiBayar =
-            `/uploads/pembayaran-denda/${req.file.filename}`;
+            req.file.publicUrl;
     }
 
     // ==================================================
@@ -411,6 +501,7 @@ const createPembayaranDenda = (
                             belum dianggap lunas sebelum
                             diverifikasi petugas.
                         */
+
                         status:
                             "Menunggu Verifikasi",
 
@@ -436,6 +527,23 @@ const createPembayaranDenda = (
                                     "ERROR CREATE PEMBAYARAN DENDA:",
                                     err
                                 );
+
+                                /*
+                                    Jika database gagal,
+                                    file Supabase tetap ada.
+                                    Kita bersihkan supaya tidak
+                                    menjadi orphan file.
+                                */
+
+                                if (
+                                    req.file &&
+                                    req.file.filename
+                                ) {
+
+                                    deleteSupabaseFile(
+                                        req.file.publicUrl
+                                    );
+                                }
 
                                 return res.status(500).json({
                                     success: false,
@@ -636,7 +744,7 @@ const updatePembayaranDenda = (
             if (req.file) {
 
                 buktiBayar =
-                    `/uploads/pembayaran-denda/${req.file.filename}`;
+                    req.file.publicUrl;
             }
 
             const updateData = {
@@ -658,6 +766,7 @@ const updatePembayaranDenda = (
                     Jika pembayaran diubah,
                     kembali ke proses verifikasi.
                 */
+
                 status:
                     "Menunggu Verifikasi",
 
@@ -681,6 +790,22 @@ const updatePembayaranDenda = (
                             err
                         );
 
+                        /*
+                            Jika update database gagal,
+                            hapus file baru yang sudah
+                            terlanjur diupload.
+                        */
+
+                        if (
+                            req.file &&
+                            req.file.publicUrl
+                        ) {
+
+                            deleteSupabaseFile(
+                                req.file.publicUrl
+                            );
+                        }
+
                         return res.status(500).json({
                             success: false,
                             message:
@@ -694,11 +819,41 @@ const updatePembayaranDenda = (
                         result.affectedRows === 0
                     ) {
 
+                        if (
+                            req.file &&
+                            req.file.publicUrl
+                        ) {
+
+                            deleteSupabaseFile(
+                                req.file.publicUrl
+                            );
+                        }
+
                         return res.status(404).json({
                             success: false,
                             message:
                                 "Pembayaran denda tidak ditemukan"
                         });
+                    }
+
+                    /*
+                        Jika file baru berhasil disimpan
+                        ke database, hapus file lama
+                        dari Supabase.
+
+                        Jika file lama masih berupa
+                        /uploads/pembayaran-denda/...
+                        helper akan mengabaikannya.
+                    */
+
+                    if (
+                        req.file &&
+                        payment.bukti_bayar
+                    ) {
+
+                        deleteSupabaseFile(
+                            payment.bukti_bayar
+                        );
                     }
 
                     return res.status(200).json({
@@ -949,7 +1104,9 @@ const updateStatusPembayaranDenda = (
                                 dendaErr
                             ) => {
 
-                                if (dendaErr) {
+                                if (
+                                    dendaErr
+                                ) {
 
                                     console.error(
                                         "ERROR UPDATE STATUS DENDA:",
@@ -1030,31 +1187,38 @@ const deletePembayaranDenda = (
         });
     }
 
-    pembayaranDendaModel.deletePembayaranDenda(
+    /*
+        Ambil data pembayaran terlebih dahulu
+        supaya URL bukti pembayaran masih tersedia
+        sebelum record database dihapus.
+    */
+
+    pembayaranDendaModel.getPembayaranDendaById(
         id,
         (
-            err,
-            result
+            getErr,
+            paymentResult
         ) => {
 
-            if (err) {
+            if (getErr) {
 
                 console.error(
-                    "ERROR DELETE PEMBAYARAN DENDA:",
-                    err
+                    "ERROR GET PEMBAYARAN DENDA SEBELUM DELETE:",
+                    getErr
                 );
 
                 return res.status(500).json({
                     success: false,
                     message:
-                        "Gagal menghapus pembayaran denda",
+                        "Gagal mengambil pembayaran denda",
                     error:
-                        err.message
+                        getErr.message
                 });
             }
 
             if (
-                result.affectedRows === 0
+                !paymentResult ||
+                paymentResult.length === 0
             ) {
 
                 return res.status(404).json({
@@ -1064,11 +1228,65 @@ const deletePembayaranDenda = (
                 });
             }
 
-            return res.status(200).json({
-                success: true,
-                message:
-                    "Pembayaran denda berhasil dihapus"
-            });
+            const payment =
+                paymentResult[0];
+
+            pembayaranDendaModel.deletePembayaranDenda(
+                id,
+                (
+                    err,
+                    result
+                ) => {
+
+                    if (err) {
+
+                        console.error(
+                            "ERROR DELETE PEMBAYARAN DENDA:",
+                            err
+                        );
+
+                        return res.status(500).json({
+                            success: false,
+                            message:
+                                "Gagal menghapus pembayaran denda",
+                            error:
+                                err.message
+                        });
+                    }
+
+                    if (
+                        result.affectedRows === 0
+                    ) {
+
+                        return res.status(404).json({
+                            success: false,
+                            message:
+                                "Pembayaran denda tidak ditemukan"
+                        });
+                    }
+
+                    /*
+                        Hapus file bukti dari Supabase.
+
+                        Kalau data lama masih menggunakan:
+                        /uploads/pembayaran-denda/...
+                        helper tidak akan menghapus apa pun.
+
+                        Kalau sudah menggunakan URL Supabase,
+                        file akan ikut dihapus.
+                    */
+
+                    deleteSupabaseFile(
+                        payment.bukti_bayar
+                    );
+
+                    return res.status(200).json({
+                        success: true,
+                        message:
+                            "Pembayaran denda berhasil dihapus"
+                    });
+                }
+            );
         }
     );
 };

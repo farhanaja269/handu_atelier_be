@@ -1,119 +1,239 @@
 const multer = require("multer");
 const path = require("path");
-const fs = require("fs");
-
-// ========================================
-// FOLDER UPLOAD QRIS
-// ========================================
-
-const uploadDir = path.join(
-    __dirname,
-    "../uploads/pembayaran"
-);
-
-if (!fs.existsSync(uploadDir)) {
-    fs.mkdirSync(
-        uploadDir,
-        {
-            recursive: true
-        }
-    );
-}
+const supabase = require("../config/supabase");
 
 
-// ========================================
+// ======================================================
 // STORAGE
-// ========================================
+// ======================================================
 
-const storage = multer.diskStorage({
+const storage =
+    multer.memoryStorage();
 
-    destination: (req, file, cb) => {
 
-        cb(
-            null,
-            uploadDir
+// ======================================================
+// NAMA FILE
+// ======================================================
+
+const generateFileName = (
+    originalName
+) => {
+
+    const safeOriginalName =
+        path.basename(
+            originalName
         );
 
-    },
+    const extension =
+        path.extname(
+            safeOriginalName
+        ).toLowerCase();
 
-    filename: (req, file, cb) => {
-
-        const originalName =
-            path.basename(
-                file.originalname
-            );
-
-        const extension =
+    const baseName =
+        path.basename(
+            safeOriginalName,
             path.extname(
-                originalName
-            ).toLowerCase();
+                safeOriginalName
+            )
+        );
 
-        const baseName =
-            path.basename(
-                originalName,
-                path.extname(originalName)
+    const cleanName =
+        baseName
+            .trim()
+            .toLowerCase()
+            .replace(
+                /[^a-z0-9]+/g,
+                "-"
+            )
+            .replace(
+                /^-+/,
+                ""
+            )
+            .replace(
+                /-+$/g,
+                ""
             );
 
-        const cleanName =
-            baseName
-                .trim()
-                .toLowerCase()
-                .replace(
-                    /[^a-z0-9]+/g,
-                    "-"
-                )
-                .replace(
-                    /^-+/,
-                    ""
-                )
-                .replace(
-                    /-+$/,
-                    ""
+    return `qris-${cleanName || "payment"}-${Date.now()}${extension}`;
+};
+
+
+// ======================================================
+// UPLOAD KE SUPABASE
+// ======================================================
+
+const uploadQrisToSupabase =
+    async (
+        req,
+        res,
+        next
+    ) => {
+
+        try {
+
+            // Tidak ada file
+            if (!req.file) {
+
+                return next();
+
+            }
+
+
+            const fileName =
+                generateFileName(
+                    req.file.originalname
                 );
 
-        const finalName =
-            `qris-${cleanName || "payment"}-${Date.now()}${extension}`;
 
-        console.log(
-            "======================================"
-        );
+            console.log(
+                "======================================"
+            );
 
-        console.log(
-            "UPLOAD QRIS"
-        );
+            console.log(
+                "UPLOAD QRIS"
+            );
 
-        console.log(
-            "Original:",
-            file.originalname
-        );
+            console.log(
+                "Original:",
+                req.file.originalname
+            );
 
-        console.log(
-            "Final:",
-            finalName
-        );
+            console.log(
+                "Final:",
+                fileName
+            );
 
-        console.log(
-            "Folder:",
-            uploadDir
-        );
+            console.log(
+                "Bucket:",
+                "qris"
+            );
 
-        console.log(
-            "======================================"
-        );
-
-        cb(
-            null,
-            finalName
-        );
-
-    }
-
-});
+            console.log(
+                "======================================"
+            );
 
 
-// ========================================
+            // ==================================================
+            // UPLOAD KE SUPABASE STORAGE
+            // ==================================================
+
+            const {
+                error
+            } =
+                await supabase.storage
+                    .from("qris")
+                    .upload(
+                        fileName,
+                        req.file.buffer,
+                        {
+                            contentType:
+                                req.file.mimetype,
+
+                            upsert:
+                                true
+                        }
+                    );
+
+
+            if (error) {
+
+                console.error(
+                    "SUPABASE UPLOAD QRIS ERROR:",
+                    error
+                );
+
+                return res
+                    .status(500)
+                    .json({
+
+                        success:
+                            false,
+
+                        message:
+                            "Gagal mengupload QRIS ke Supabase",
+
+                        error:
+                            error.message
+
+                    });
+
+            }
+
+
+            // ==================================================
+            // PUBLIC URL
+            // ==================================================
+
+            const {
+                data:
+                    publicUrlData
+            } =
+                supabase.storage
+                    .from("qris")
+                    .getPublicUrl(
+                        fileName
+                    );
+
+
+            const publicUrl =
+                publicUrlData
+                    .publicUrl;
+
+
+            // ==================================================
+            // TAMBAHKAN DATA KE req.file
+            // ==================================================
+
+            req.file.filename =
+                fileName;
+
+            req.file.path =
+                publicUrl;
+
+            req.file.publicUrl =
+                publicUrl;
+
+
+            console.log(
+                "Public URL:",
+                publicUrl
+            );
+
+
+            next();
+
+        } catch (
+            error
+        ) {
+
+            console.error(
+                "UPLOAD QRIS ERROR:",
+                error
+            );
+
+            return res
+                .status(500)
+                .json({
+
+                    success:
+                        false,
+
+                    message:
+                        "Gagal memproses upload QRIS",
+
+                    error:
+                        error.message
+
+                });
+
+        }
+
+    };
+
+
+// ======================================================
 // FILTER FILE
-// ========================================
+// ======================================================
 
 const fileFilter = (
     req,
@@ -122,11 +242,17 @@ const fileFilter = (
 ) => {
 
     const allowedMimeTypes = [
+
         "image/jpeg",
+
         "image/jpg",
+
         "image/png",
+
         "image/webp"
+
     ];
+
 
     if (
         allowedMimeTypes.includes(
@@ -153,27 +279,91 @@ const fileFilter = (
 };
 
 
-// ========================================
+// ======================================================
 // MULTER
-// ========================================
+// ======================================================
 
-const uploadQris = multer({
+const upload =
+    multer({
 
-    storage,
+        storage,
 
-    fileFilter,
+        fileFilter,
 
-    limits: {
-        fileSize:
-            5 * 1024 * 1024
+        limits: {
+
+            fileSize:
+                5 * 1024 * 1024
+
+        }
+
+    });
+
+
+// ======================================================
+// MIDDLEWARE UTAMA
+// ======================================================
+
+const uploadQris = {
+
+    single: (
+        fieldName
+    ) => {
+
+        return (
+            req,
+            res,
+            next
+        ) => {
+
+            upload.single(
+                fieldName
+            )(
+                req,
+                res,
+                (err) => {
+
+                    if (err) {
+
+                        console.error(
+                            "MULTER QRIS ERROR:",
+                            err
+                        );
+
+                        return res
+                            .status(400)
+                            .json({
+
+                                success:
+                                    false,
+
+                                message:
+                                    err.message
+
+                            });
+
+                    }
+
+
+                    uploadQrisToSupabase(
+                        req,
+                        res,
+                        next
+                    );
+
+                }
+            );
+
+        };
+
     }
 
-});
+};
 
 
-// ========================================
+// ======================================================
 // EXPORT
-// ========================================
+// ======================================================
 
 module.exports =
     uploadQris;

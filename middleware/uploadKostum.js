@@ -1,21 +1,14 @@
 const multer = require("multer");
 const path = require("path");
-const fs = require("fs");
+
+const supabase = require("../config/supabase");
 
 // ==================================================
-// FOLDER UPLOAD
+// NAMA BUCKET SUPABASE
 // ==================================================
 
-const uploadDir = path.join(
-    __dirname,
-    "../uploads/kostum"
-);
+const BUCKET_NAME = "kostum";
 
-if (!fs.existsSync(uploadDir)) {
-    fs.mkdirSync(uploadDir, {
-        recursive: true
-    });
-}
 
 // ==================================================
 // FUNGSI BERSIHKAN NAMA FILE
@@ -31,62 +24,18 @@ const sanitizeFileName = (name) => {
         .replace(/^-+|-+$/g, "");
 };
 
+
 // ==================================================
 // STORAGE MULTER
 // ==================================================
+//
+// File tidak disimpan ke laptop.
+// File hanya disimpan sementara di memory
+// sebelum dikirim ke Supabase Storage.
+//
 
-const storage = multer.diskStorage({
+const storage = multer.memoryStorage();
 
-    destination: (req, file, cb) => {
-        cb(null, uploadDir);
-    },
-
-    filename: (req, file, cb) => {
-
-        let namaKostum = req.body.nama_kostum;
-
-        // Jika nama kostum tersedia
-        if (namaKostum) {
-
-            const cleanName =
-                sanitizeFileName(namaKostum);
-
-            const ext =
-                path.extname(file.originalname)
-                    .toLowerCase();
-
-            cb(
-                null,
-                `${cleanName}${ext}`
-            );
-
-            return;
-        }
-
-        // ==================================================
-        // FALLBACK
-        // Jika nama_kostum belum terbaca
-        // ==================================================
-
-        const originalName =
-            path.basename(
-                file.originalname,
-                path.extname(file.originalname)
-            );
-
-        const cleanName =
-            sanitizeFileName(originalName);
-
-        const ext =
-            path.extname(file.originalname)
-                .toLowerCase();
-
-        cb(
-            null,
-            `${cleanName}${ext}`
-        );
-    }
-});
 
 // ==================================================
 // FILTER FILE
@@ -118,11 +67,12 @@ const fileFilter = (req, file, cb) => {
     }
 };
 
+
 // ==================================================
 // MULTER
 // ==================================================
 
-const uploadKostum = multer({
+const multerUpload = multer({
 
     storage,
 
@@ -134,6 +84,233 @@ const uploadKostum = multer({
     }
 
 });
+
+
+// ==================================================
+// UPLOAD KE SUPABASE
+// ==================================================
+
+const uploadToSupabase = async (
+    req,
+    file
+) => {
+
+    if (!file || !file.buffer) {
+        return null;
+    }
+
+
+    // ==================================================
+    // TENTUKAN NAMA FILE
+    // ==================================================
+
+    let namaKostum =
+        req.body &&
+        req.body.nama_kostum
+            ? req.body.nama_kostum
+            : null;
+
+
+    let baseName;
+
+
+    if (namaKostum) {
+
+        baseName =
+            sanitizeFileName(
+                namaKostum
+            );
+
+    } else {
+
+        const originalName =
+            path.basename(
+                file.originalname,
+                path.extname(
+                    file.originalname
+                )
+            );
+
+        baseName =
+            sanitizeFileName(
+                originalName
+            );
+    }
+
+
+    // ==================================================
+    // EXTENSION
+    // ==================================================
+
+    const ext =
+        path.extname(
+            file.originalname
+        ).toLowerCase();
+
+
+    // ==================================================
+    // PATH FILE SUPABASE
+    // ==================================================
+    //
+    // Contoh:
+    //
+    // ageng-kanigaran.jpeg
+    //
+    // Jika nama yang sama di-upload lagi,
+    // file akan diperbarui karena upsert = true.
+    //
+
+    const fileName =
+        `${baseName}${ext}`;
+
+
+    // ==================================================
+    // UPLOAD
+    // ==================================================
+
+    const {
+        error
+    } = await supabase
+        .storage
+        .from(BUCKET_NAME)
+        .upload(
+            fileName,
+            file.buffer,
+            {
+                contentType:
+                    file.mimetype,
+
+                upsert: true
+            }
+        );
+
+
+    // ==================================================
+    // CEK ERROR
+    // ==================================================
+
+    if (error) {
+
+        console.error(
+            "ERROR UPLOAD SUPABASE:",
+            error
+        );
+
+        throw new Error(
+            `Gagal upload foto ke Supabase: ${error.message}`
+        );
+    }
+
+
+    // ==================================================
+    // AMBIL PUBLIC URL
+    // ==================================================
+
+    const {
+        data: publicUrlData
+    } =
+        supabase
+            .storage
+            .from(BUCKET_NAME)
+            .getPublicUrl(
+                fileName
+            );
+
+
+    if (
+        !publicUrlData ||
+        !publicUrlData.publicUrl
+    ) {
+
+        throw new Error(
+            "URL publik foto Supabase tidak berhasil dibuat."
+        );
+    }
+
+
+    // ==================================================
+    // SIMPAN INFORMASI KE req.file
+    // ==================================================
+
+    file.filename =
+        fileName;
+
+    file.path =
+        publicUrlData.publicUrl;
+
+    file.publicUrl =
+        publicUrlData.publicUrl;
+
+
+    return file;
+};
+
+
+// ==================================================
+// MIDDLEWARE SINGLE
+// ==================================================
+//
+// Router kamu sekarang menggunakan:
+//
+// uploadKostum.single("foto")
+//
+// Jadi kita pertahankan format tersebut
+// supaya router tidak perlu diubah.
+//
+
+const uploadKostum = {
+
+    single: (fieldName) => {
+
+        const multerMiddleware =
+            multerUpload.single(
+                fieldName
+            );
+
+
+        return async (
+            req,
+            res,
+            next
+        ) => {
+
+            multerMiddleware(
+                req,
+                res,
+                async (err) => {
+
+                    if (err) {
+                        return next(err);
+                    }
+
+
+                    try {
+
+                        if (req.file) {
+
+                            await uploadToSupabase(
+                                req,
+                                req.file
+                            );
+
+                        }
+
+                        next();
+
+                    } catch (error) {
+
+                        next(error);
+
+                    }
+
+                }
+            );
+
+        };
+    }
+
+};
+
 
 // ==================================================
 // EXPORT

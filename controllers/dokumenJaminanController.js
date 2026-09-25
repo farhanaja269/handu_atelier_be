@@ -1,8 +1,33 @@
-const fs = require("fs");
-const path = require("path");
+const supabase =
+    require("../config/supabase");
 
-const dokumenJaminanModel = require("../models/dokumenJaminanModel");
-const peminjamanModel = require("../models/peminjamanModel");
+const deleteSupabaseFile = async (fileName) => {
+    if (!fileName) return;
+
+    try {
+        const { error } = await supabase.storage
+            .from("dokumen-jaminan")
+            .remove([fileName]);
+
+        if (error) {
+            console.error(
+                "Gagal menghapus file dari Supabase:",
+                error
+            );
+        }
+    } catch (error) {
+        console.error(
+            "Gagal menghapus file dari Supabase:",
+            error
+        );
+    }
+};
+
+const dokumenJaminanModel =
+    require("../models/dokumenJaminanModel");
+
+const peminjamanModel =
+    require("../models/peminjamanModel");
 
 
 // ======================================================
@@ -139,7 +164,7 @@ const getDokumenJaminanByPeminjaman = (
 // CREATE DOKUMEN JAMINAN
 // ======================================================
 
-const createDokumenJaminan = (
+const createDokumenJaminan = async (
     req,
     res
 ) => {
@@ -152,6 +177,7 @@ const createDokumenJaminan = (
     const idPeminjaman =
         Number(id_peminjaman);
 
+
     // ==================================================
     // VALIDASI PEMINJAMAN
     // ==================================================
@@ -160,12 +186,19 @@ const createDokumenJaminan = (
         !idPeminjaman ||
         Number.isNaN(idPeminjaman)
     ) {
+        if (req.file) {
+            await deleteSupabaseFile(
+                req.file.filename
+            );
+        }
+
         return res.status(400).json({
             success: false,
             message:
                 "ID peminjaman wajib diisi.",
         });
     }
+
 
     // ==================================================
     // VALIDASI JENIS DOKUMEN
@@ -181,12 +214,19 @@ const createDokumenJaminan = (
             jenis_dokumen
         )
     ) {
+        if (req.file) {
+            await deleteSupabaseFile(
+                req.file.filename
+            );
+        }
+
         return res.status(400).json({
             success: false,
             message:
                 "Jenis dokumen harus KTP atau Kartu Keluarga.",
         });
     }
+
 
     // ==================================================
     // VALIDASI FILE
@@ -200,14 +240,17 @@ const createDokumenJaminan = (
         });
     }
 
+
     // ==================================================
     // VALIDASI MIME TYPE
     // ==================================================
 
     const allowedMimeTypes = [
         "image/jpeg",
+        "image/jpg",
         "image/png",
         "image/webp",
+        "application/pdf",
     ];
 
     if (
@@ -215,25 +258,17 @@ const createDokumenJaminan = (
             req.file.mimetype
         )
     ) {
-        // Hapus file jika middleware
-        // sudah sempat menyimpannya
-        try {
-            if (req.file.path) {
-                fs.unlinkSync(req.file.path);
-            }
-        } catch (deleteError) {
-            console.error(
-                "Gagal menghapus file invalid:",
-                deleteError
-            );
-        }
+        await deleteSupabaseFile(
+            req.file.filename
+        );
 
         return res.status(400).json({
             success: false,
             message:
-                "Dokumen jaminan harus berupa JPG, PNG, atau WEBP.",
+                "Dokumen jaminan harus berupa JPG, JPEG, PNG, WEBP, atau PDF.",
         });
     }
+
 
     // ==================================================
     // VALIDASI UKURAN
@@ -243,16 +278,9 @@ const createDokumenJaminan = (
         Number(req.file.size) >
         5 * 1024 * 1024
     ) {
-        try {
-            if (req.file.path) {
-                fs.unlinkSync(req.file.path);
-            }
-        } catch (deleteError) {
-            console.error(
-                "Gagal menghapus file terlalu besar:",
-                deleteError
-            );
-        }
+        await deleteSupabaseFile(
+            req.file.filename
+        );
 
         return res.status(400).json({
             success: false,
@@ -261,17 +289,22 @@ const createDokumenJaminan = (
         });
     }
 
+
     // ==================================================
     // CEK PEMINJAMAN
     // ==================================================
 
     peminjamanModel.getPeminjamanById(
         idPeminjaman,
-        (loanError, loanResult) => {
+        async (loanError, loanResult) => {
             if (loanError) {
                 console.error(
                     "Error cek peminjaman:",
                     loanError
+                );
+
+                await deleteSupabaseFile(
+                    req.file.filename
                 );
 
                 return res.status(500).json({
@@ -285,6 +318,10 @@ const createDokumenJaminan = (
                 !loanResult ||
                 loanResult.length === 0
             ) {
+                await deleteSupabaseFile(
+                    req.file.filename
+                );
+
                 return res.status(404).json({
                     success: false,
                     message:
@@ -295,6 +332,7 @@ const createDokumenJaminan = (
             const peminjaman =
                 loanResult[0];
 
+
             // ==================================================
             // DOKUMEN HANYA UNTUK PEMINJAMAN
             // YANG MASIH MENUNGGU
@@ -304,6 +342,10 @@ const createDokumenJaminan = (
                 peminjaman.status !==
                 "Menunggu"
             ) {
+                await deleteSupabaseFile(
+                    req.file.filename
+                );
+
                 return res.status(400).json({
                     success: false,
                     message:
@@ -311,17 +353,25 @@ const createDokumenJaminan = (
                 });
             }
 
+
             // ==================================================
             // CEK DUPLIKAT
             // ==================================================
 
             dokumenJaminanModel.checkExistingDokumenJaminan(
                 idPeminjaman,
-                (existingError, existingResult) => {
+                async (
+                    existingError,
+                    existingResult
+                ) => {
                     if (existingError) {
                         console.error(
                             "Error cek dokumen:",
                             existingError
+                        );
+
+                        await deleteSupabaseFile(
+                            req.file.filename
                         );
 
                         return res.status(500).json({
@@ -335,6 +385,10 @@ const createDokumenJaminan = (
                         existingResult &&
                         existingResult.length > 0
                     ) {
+                        await deleteSupabaseFile(
+                            req.file.filename
+                        );
+
                         return res.status(409).json({
                             success: false,
                             message:
@@ -342,17 +396,10 @@ const createDokumenJaminan = (
                         });
                     }
 
+
                     // ==================================================
                     // SIMPAN DATABASE
                     // ==================================================
-
-                    const relativePath =
-                        path
-                            .relative(
-                                process.cwd(),
-                                req.file.path
-                            )
-                            .replace(/\\/g, "/");
 
                     const data = {
                         id_peminjaman:
@@ -365,7 +412,7 @@ const createDokumenJaminan = (
                             req.file.filename,
 
                         path_file:
-                            relativePath,
+                            req.file.publicUrl,
 
                         mime_type:
                             req.file.mimetype,
@@ -387,32 +434,22 @@ const createDokumenJaminan = (
                             null,
                     };
 
+
                     dokumenJaminanModel.createDokumenJaminan(
                         data,
-                        (createError, result) => {
+                        async (
+                            createError,
+                            result
+                        ) => {
                             if (createError) {
                                 console.error(
                                     "Error create dokumen:",
                                     createError
                                 );
 
-                                // Hapus file jika DB gagal
-                                try {
-                                    if (
-                                        req.file.path
-                                    ) {
-                                        fs.unlinkSync(
-                                            req.file.path
-                                        );
-                                    }
-                                } catch (
-                                    deleteError
-                                ) {
-                                    console.error(
-                                        "Gagal menghapus file:",
-                                        deleteError
-                                    );
-                                }
+                                await deleteSupabaseFile(
+                                    req.file.filename
+                                );
 
                                 return res.status(500).json({
                                     success: false,
@@ -524,8 +561,10 @@ const updateStatusDokumenJaminan = (
             const current =
                 result[0];
 
+
             // Jangan izinkan verifikasi ulang
             // terhadap dokumen yang sudah terverifikasi
+
             if (
                 current.status ===
                     "Terverifikasi" &&
@@ -616,8 +655,10 @@ const deleteDokumenJaminan = (
             const dokumen =
                 result[0];
 
+
             // Jangan hapus dokumen yang
             // sudah terverifikasi
+
             if (
                 dokumen.status ===
                 "Terverifikasi"
@@ -629,9 +670,10 @@ const deleteDokumenJaminan = (
                 });
             }
 
+
             dokumenJaminanModel.deleteDokumenJaminan(
                 id,
-                (deleteError) => {
+                async (deleteError) => {
                     if (deleteError) {
                         console.error(
                             "Error delete dokumen:",
@@ -645,29 +687,10 @@ const deleteDokumenJaminan = (
                         });
                     }
 
-                    // Hapus file fisik
-                    try {
-                        const absolutePath =
-                            path.resolve(
-                                process.cwd(),
-                                dokumen.path_file
-                            );
-
-                        if (
-                            fs.existsSync(
-                                absolutePath
-                            )
-                        ) {
-                            fs.unlinkSync(
-                                absolutePath
-                            );
-                        }
-                    } catch (fileError) {
-                        console.error(
-                            "Gagal menghapus file fisik:",
-                            fileError
-                        );
-                    }
+                    // Hapus file dari Supabase Storage
+                    await deleteSupabaseFile(
+                        dokumen.nama_file
+                    );
 
                     return res.status(200).json({
                         success: true,
@@ -739,6 +762,7 @@ const viewDokumenJaminan = (
             const dokumen =
                 result[0];
 
+
             // ==============================================
             // IZIN AKSES
             // ==============================================
@@ -769,36 +793,17 @@ const viewDokumenJaminan = (
                 });
             }
 
-            const absolutePath =
-                path.resolve(
-                    process.cwd(),
-                    dokumen.path_file
-                );
 
-            if (
-                !fs.existsSync(
-                    absolutePath
-                )
-            ) {
+            if (!dokumen.path_file) {
                 return res.status(404).json({
                     success: false,
                     message:
-                        "File dokumen tidak ditemukan di server.",
+                        "URL file dokumen tidak ditemukan.",
                 });
             }
 
-            res.setHeader(
-                "Content-Type",
-                dokumen.mime_type
-            );
-
-            res.setHeader(
-                "Content-Disposition",
-                `inline; filename="${dokumen.nama_file}"`
-            );
-
-            return res.sendFile(
-                absolutePath
+            return res.redirect(
+                dokumen.path_file
             );
         }
     );

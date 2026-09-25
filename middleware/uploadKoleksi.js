@@ -1,159 +1,234 @@
 const multer = require("multer");
 const path = require("path");
-const fs = require("fs");
-
-
-// ======================================================
-// FOLDER UPLOAD KOLEKSI
-// ======================================================
-
-const uploadDir = path.join(
-    __dirname,
-    "../uploads/koleksi"
-);
-
-
-// ======================================================
-// PASTIKAN FOLDER ADA
-// ======================================================
-
-if (!fs.existsSync(uploadDir)) {
-
-    fs.mkdirSync(
-        uploadDir,
-        {
-            recursive: true
-        }
-    );
-
-}
+const supabase = require("../config/supabase");
 
 
 // ======================================================
 // STORAGE
 // ======================================================
 
-const storage = multer.diskStorage({
+const storage =
+    multer.memoryStorage();
 
-    destination: (
-        req,
-        file,
-        cb
-    ) => {
 
-        cb(
-            null,
-            uploadDir
+// ======================================================
+// NAMA FILE
+// ======================================================
+
+const generateFileName = (
+    originalName
+) => {
+
+    const safeOriginalName =
+        path.basename(
+            originalName
         );
 
-    },
+    const extension =
+        path.extname(
+            safeOriginalName
+        ).toLowerCase();
+
+    const baseName =
+        path.basename(
+            safeOriginalName,
+            path.extname(
+                safeOriginalName
+            )
+        );
+
+    const cleanName =
+        baseName
+            .trim()
+            .toLowerCase()
+            .replace(
+                /[^a-z0-9]+/g,
+                "-"
+            )
+            .replace(
+                /^-+/,
+                ""
+            )
+            .replace(
+                /-+$/,
+                ""
+            );
+
+    return `${cleanName}${extension}`;
+};
 
 
-    filename: (
+// ======================================================
+// UPLOAD KE SUPABASE
+// ======================================================
+
+const uploadKoleksiToSupabase =
+    async (
         req,
-        file,
-        cb
+        res,
+        next
     ) => {
 
-        // ==============================================
-        // AMBIL NAMA FILE ASLI
-        // ==============================================
+        try {
 
-        const originalName =
-            path.basename(
-                file.originalname
-            );
+            // Tidak ada file
+            if (!req.file) {
 
+                return next();
 
-        // ==============================================
-        // EXTENSION
-        // ==============================================
-
-        const extension =
-            path.extname(
-                originalName
-            ).toLowerCase();
+            }
 
 
-        // ==============================================
-        // NAMA FILE TANPA EXTENSION
-        // ==============================================
-
-        const baseName =
-            path.basename(
-                originalName,
-                path.extname(
-                    originalName
-                )
-            );
-
-
-        // ==============================================
-        // NORMALISASI NAMA
-        // ==============================================
-
-        const cleanName =
-            baseName
-                .trim()
-                .toLowerCase()
-                .replace(
-                    /[^a-z0-9]+/g,
-                    "-"
-                )
-                .replace(
-                    /^-+/,
-                    ""
-                )
-                .replace(
-                    /-+$/,
-                    ""
+            const fileName =
+                generateFileName(
+                    req.file.originalname
                 );
 
 
-        // ==============================================
-        // NAMA FINAL
-        // ==============================================
+            console.log(
+                "======================================"
+            );
 
-        const finalName =
-            `${cleanName}${extension}`;
+            console.log(
+                "UPLOAD FOTO KOLEKSI"
+            );
 
+            console.log(
+                "Original:",
+                req.file.originalname
+            );
 
-        console.log(
-            "======================================"
-        );
+            console.log(
+                "Final:",
+                fileName
+            );
 
-        console.log(
-            "UPLOAD FOTO KOLEKSI"
-        );
+            console.log(
+                "Bucket:",
+                "koleksi"
+            );
 
-        console.log(
-            "Original:",
-            file.originalname
-        );
-
-        console.log(
-            "Final:",
-            finalName
-        );
-
-        console.log(
-            "Folder:",
-            uploadDir
-        );
-
-        console.log(
-            "======================================"
-        );
+            console.log(
+                "======================================"
+            );
 
 
-        cb(
-            null,
-            finalName
-        );
+            // ==================================================
+            // UPLOAD KE SUPABASE STORAGE
+            // ==================================================
 
-    }
+            const {
+                error
+            } =
+                await supabase.storage
+                    .from("koleksi")
+                    .upload(
+                        fileName,
+                        req.file.buffer,
+                        {
+                            contentType:
+                                req.file.mimetype,
 
-});
+                            upsert:
+                                true
+                        }
+                    );
+
+
+            if (error) {
+
+                console.error(
+                    "SUPABASE UPLOAD KOLEKSI ERROR:",
+                    error
+                );
+
+                return res
+                    .status(500)
+                    .json({
+
+                        success:
+                            false,
+
+                        message:
+                            "Gagal mengupload foto koleksi ke Supabase",
+
+                        error:
+                            error.message
+
+                    });
+
+            }
+
+
+            // ==================================================
+            // PUBLIC URL
+            // ==================================================
+
+            const {
+                data:
+                    publicUrlData
+            } =
+                supabase.storage
+                    .from("koleksi")
+                    .getPublicUrl(
+                        fileName
+                    );
+
+
+            const publicUrl =
+                publicUrlData
+                    .publicUrl;
+
+
+            // ==================================================
+            // TAMBAHKAN DATA KE req.file
+            // ==================================================
+
+            req.file.filename =
+                fileName;
+
+            req.file.path =
+                publicUrl;
+
+            req.file.publicUrl =
+                publicUrl;
+
+
+            console.log(
+                "Public URL:",
+                publicUrl
+            );
+
+
+            next();
+
+        } catch (
+            error
+        ) {
+
+            console.error(
+                "UPLOAD KOLEKSI ERROR:",
+                error
+            );
+
+            return res
+                .status(500)
+                .json({
+
+                    success:
+                        false,
+
+                    message:
+                        "Gagal memproses upload foto koleksi",
+
+                    error:
+                        error.message
+
+                });
+
+        }
+
+    };
 
 
 // ======================================================
@@ -208,7 +283,7 @@ const fileFilter = (
 // MULTER KOLEKSI
 // ======================================================
 
-const uploadKoleksi =
+const upload =
     multer({
 
         storage,
@@ -223,6 +298,67 @@ const uploadKoleksi =
         }
 
     });
+
+
+// ======================================================
+// MIDDLEWARE UTAMA
+// ======================================================
+
+const uploadKoleksi = {
+
+    single: (
+        fieldName
+    ) => {
+
+        return (
+            req,
+            res,
+            next
+        ) => {
+
+            upload.single(
+                fieldName
+            )(
+                req,
+                res,
+                (err) => {
+
+                    if (err) {
+
+                        console.error(
+                            "MULTER KOLEKSI ERROR:",
+                            err
+                        );
+
+                        return res
+                            .status(400)
+                            .json({
+
+                                success:
+                                    false,
+
+                                message:
+                                    err.message
+
+                            });
+
+                    }
+
+
+                    uploadKoleksiToSupabase(
+                        req,
+                        res,
+                        next
+                    );
+
+                }
+            );
+
+        };
+
+    }
+
+};
 
 
 // ======================================================

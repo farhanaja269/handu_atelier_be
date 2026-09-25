@@ -193,27 +193,14 @@ const createKoleksi = (
     // =================================================
 
     let foto =
-        null;
+    null;
 
-
-    if (
-        req.file
-    ) {
-
-        /*
-         * FOTO DISIMPAN DENGAN
-         * PATH RELATIF
-         *
-         * Contoh:
-         *
-         * /uploads/koleksi/tradisional.jpg
-         */
-
-        foto =
-            `/uploads/koleksi/${req.file.filename}`;
-
-    }
-
+if (
+    req.file
+) {
+    foto =
+        req.file.publicUrl;
+}
 
     const data = {
 
@@ -444,25 +431,23 @@ const updateKoleksi = (
 
             let foto;
 
-
             if (
                 req.file
             ) {
-
-                // Foto baru
+            
+                // Foto baru dari Supabase
                 foto =
-                    `/uploads/koleksi/${req.file.filename}`;
-
+                    req.file.publicUrl;
+            
             } else {
-
+            
                 // Pertahankan foto lama
                 foto =
                     oldData.foto ||
                     null;
-
+            
             }
-
-
+            
             const data = {
 
                 nama_koleksi:

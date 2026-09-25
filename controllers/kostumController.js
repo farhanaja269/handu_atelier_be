@@ -247,21 +247,16 @@ const createKostum = (
 
     let foto = null;
 
-
-    if (
-        req.file
-    ) {
-
+    if (req.file) {
+    
         /*
-         * DATABASE HANYA MENYIMPAN:
-         *
-         * ageng-kanigaran.jpeg
+         * DATABASE MENYIMPAN
+         * PUBLIC URL SUPABASE
          */
-
+    
         foto =
-            req.file.filename;
+            req.file.publicUrl;
     }
-
 
     // ==================================================
     // DATA
@@ -656,32 +651,28 @@ const updateKostum = (
 
             let foto;
 
+if (req.file) {
 
-            if (
-                req.file
-            ) {
+    /*
+     * FOTO BARU
+     *
+     * Simpan URL Supabase ke database.
+     */
 
-                /*
-                 * FOTO BARU
-                 *
-                 * Hanya nama file masuk DB.
-                 */
+    foto =
+        req.file.publicUrl;
 
-                foto =
-                    req.file.filename;
+} else {
 
-            } else {
+    /*
+     * Tidak ganti foto:
+     * pertahankan foto lama.
+     */
 
-                /*
-                 * Tidak ganti foto:
-                 * pertahankan foto lama.
-                 */
-
-                foto =
-                    oldData.foto ||
-                    null;
-            }
-
+    foto =
+        oldData.foto ||
+        null;
+}
 
             // ==================================================
             // DATA FINAL
